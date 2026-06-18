@@ -1,0 +1,11 @@
+export const APP_SETTINGS_ID = 1;
+export const SECRETS_ID = 1;
+export const DEFAULT_SYSTEM_PROMPT_NAME = 'default-editorial-system-prompt';
+export const DEFAULT_SYSTEM_PROMPT_VERSION = 1;
+export const OTP_EXPIRATION_MINUTES = 5;
+export const DEFAULT_SESSION_DURATION_MINUTES = 12 * 60;
+export const SESSION_COOKIE_FALLBACK = 'draftmind_session';
+export const DEFAULT_AI_TIMEOUT_SECONDS = 60;
+export const DEFAULT_AI_MAX_TOKENS = 2048;
+export const DEFAULT_AI_TEMPERATURE = 0.4;
+export const DEFAULT_PUBLISH_INTERVAL_MINUTES = 0;

@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 36 27% 96%;
+  --foreground: 210 29% 17%;
+  --card: 0 0% 100%;
+  --card-foreground: 210 29% 17%;
+  --primary: 191 72% 33%;
+  --primary-foreground: 36 27% 96%;
+  --secondary: 39 84% 86%;
+  --secondary-foreground: 210 29% 17%;
+  --muted: 38 35% 90%;
+  --muted-foreground: 210 14% 38%;
+  --accent: 20 75% 86%;
+  --accent-foreground: 210 29% 17%;
+  --destructive: 5 78% 53%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 35 24% 82%;
+  --input: 35 24% 82%;
+  --ring: 191 72% 33%;
+  --radius: 1rem;
+  --font-sans: "Space Grotesk";
+  --font-mono: "IBM Plex Mono";
+}
+
+.dark {
+  --background: 213 31% 10%;
+  --foreground: 36 27% 96%;
+  --card: 213 26% 14%;
+  --card-foreground: 36 27% 96%;
+  --primary: 191 72% 48%;
+  --primary-foreground: 213 31% 10%;
+  --secondary: 212 17% 20%;
+  --secondary-foreground: 36 27% 96%;
+  --muted: 213 16% 18%;
+  --muted-foreground: 34 16% 72%;
+  --accent: 18 58% 24%;
+  --accent-foreground: 36 27% 96%;
+  --destructive: 6 80% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 215 17% 24%;
+  --input: 215 17% 24%;
+  --ring: 191 72% 48%;
+}
+
+body {
+  @apply bg-background text-foreground min-h-screen antialiased;
+  background-image:
+    radial-gradient(circle at top left, rgba(245, 196, 105, 0.22), transparent 34%),
+    radial-gradient(circle at bottom right, rgba(50, 160, 181, 0.14), transparent 30%),
+    linear-gradient(180deg, rgba(255,255,255,0.45), rgba(255,255,255,0));
+}
+
+* {
+  @apply border-border;
+}

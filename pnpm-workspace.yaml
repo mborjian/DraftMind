@@ -1,0 +1,10 @@
+packages:
+  - apps/*
+allowBuilds:
+  argon2: true
+  bufferutil: true
+  es5-ext: true
+  esbuild: true
+  sharp: true
+  sqlite3: true
+  utf-8-validate: true

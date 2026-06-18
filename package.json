@@ -1,0 +1,17 @@
+{
+  "name": "draftmind",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@11.4.0",
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,magenta \"pnpm --filter @draftmind/backend dev\" \"pnpm --filter @draftmind/frontend dev\"",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "format": "pnpm -r format"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3"
+  }
+}
