@@ -1,10 +1,18 @@
 import 'reflect-metadata';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { findWorkspaceRoot } from './common/utils/workspace-path.util';
 import { AppModule } from './app.module';
+
+const envPath = path.join(findWorkspaceRoot(), '.env');
+if (existsSync(envPath) && typeof process.loadEnvFile === 'function') {
+  process.loadEnvFile(envPath);
+}
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule, {

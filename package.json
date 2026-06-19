@@ -4,7 +4,10 @@
   "version": "0.1.0",
   "packageManager": "pnpm@11.4.0",
   "scripts": {
-    "dev": "concurrently -n backend,frontend -c blue,magenta \"pnpm --filter @draftmind/backend dev\" \"pnpm --filter @draftmind/frontend dev\"",
+    "first-start": "node scripts/first-start.mjs",
+    "start": "node scripts/start-local.mjs",
+    "dev": "node scripts/start-local.mjs",
+    "dev:services": "concurrently -n backend,frontend -c blue,magenta \"pnpm --filter @draftmind/backend dev\" \"pnpm --filter @draftmind/frontend dev\"",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "test": "pnpm -r test",

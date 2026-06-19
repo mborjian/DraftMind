@@ -2,7 +2,10 @@ import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { apiBaseUrl } from '@/lib/api-client';
 
-const sessionCookieName = process.env.NEXT_PUBLIC_SESSION_COOKIE_NAME ?? 'draftmind_session';
+const sessionCookieName =
+  process.env.SESSION_COOKIE_NAME ??
+  process.env.NEXT_PUBLIC_SESSION_COOKIE_NAME ??
+  'draftmind_session';
 
 interface ApiEnvelope<T> {
   success?: boolean;
