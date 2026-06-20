@@ -9,6 +9,12 @@ export interface SetupStatus {
   authMode: string;
 }
 
+export interface SetupProviderProbeResult {
+  success: boolean;
+  statusCode: number;
+  models: string[];
+}
+
 export interface AppSettings {
   id: number;
   appName: string;

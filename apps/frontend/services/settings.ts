@@ -5,7 +5,7 @@ export async function getSettings() {
   return apiRequest<AppSettings>('/settings');
 }
 
-export async function updateSettings(payload: Partial<AppSettings>) {
+export async function updateSettings(payload: Partial<AppSettings> & { password?: string }) {
   return apiRequest<AppSettings>('/settings', {
     method: 'PUT',
     body: JSON.stringify(payload),

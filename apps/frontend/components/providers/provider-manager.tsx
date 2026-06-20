@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { handleClientError } from '@/lib/handle-client-error';
 import type { AiProvider } from '@/types/api';
-import { createProvider, deleteProvider, testProvider, updateProvider } from '@/services/providers';
+import { createProvider, deleteProvider, listProviderModels, testProvider, updateProvider } from '@/services/providers';
 
 const emptyProvider = {
   name: '',
@@ -32,6 +32,7 @@ export function ProviderManager({ initialProviders }: { initialProviders: AiProv
   const [providers, setProviders] = useState(initialProviders);
   const [selectedProviderId, setSelectedProviderId] = useState<number | 'new'>(initialProviders[0]?.id ?? 'new');
   const [form, setForm] = useState(emptyProvider);
+  const [models, setModels] = useState<string[]>([emptyProvider.model]);
   const [status, setStatus] = useState('Configure provider endpoints, credentials, and model defaults.');
 
   const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null;
@@ -53,6 +54,7 @@ export function ProviderManager({ initialProviders }: { initialProviders: AiProv
       maxTokens: provider.maxTokens,
       temperature: provider.temperature,
     });
+    setModels([provider.model]);
   }
 
   async function handleSave() {
@@ -104,9 +106,29 @@ export function ProviderManager({ initialProviders }: { initialProviders: AiProv
     setStatus('Testing provider connectivity...');
     try {
       const result = await testProvider(providerId);
-      setStatus(result.success ? `Provider test succeeded with HTTP ${result.statusCode}.` : `Provider test failed with HTTP ${result.statusCode}.`);
+      const nextModels = result.models.length > 0 ? result.models : [form.model];
+      setModels(nextModels);
+      if (!nextModels.includes(form.model)) {
+        setForm((current) => ({ ...current, model: nextModels[0] ?? current.model }));
+      }
+      setStatus(result.success ? `Provider test succeeded with HTTP ${result.statusCode}. ${nextModels.length} model(s) available.` : `Provider test failed with HTTP ${result.statusCode}.`);
     } catch (error) {
       setStatus(handleClientError(error, router, 'Provider test failed.'));
+    }
+  }
+
+  async function handleLoadModels() {
+    if (!selectedProvider) {
+      return;
+    }
+
+    setStatus('Loading provider models...');
+    try {
+      const nextModels = await listProviderModels(selectedProvider.id);
+      setModels(nextModels.length > 0 ? nextModels : [form.model]);
+      setStatus(nextModels.length > 0 ? `Loaded ${nextModels.length} model(s).` : 'No models were returned by the provider.');
+    } catch (error) {
+      setStatus(handleClientError(error, router, 'Model load failed.'));
     }
   }
 
@@ -148,9 +170,9 @@ export function ProviderManager({ initialProviders }: { initialProviders: AiProv
         <FormSection title={selectedProvider ? `Edit ${selectedProvider.name}` : 'Create provider'} description={status}>
           <div className="grid gap-4 md:grid-cols-2">
             <FormField label="Name"><Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
-            <FormField label="Provider type"><Input value={form.providerType} onChange={(event) => setForm({ ...form, providerType: event.target.value })} /></FormField>
-            <FormField label="Base URL"><Input value={form.baseUrl} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} /></FormField>
-            <FormField label="Model"><Input value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} /></FormField>
+            <FormField label="Provider type"><Select value={form.providerType} onChange={(event) => setForm({ ...form, providerType: event.target.value })}><option value="openai-compatible">OpenAI-compatible</option><option value="openrouter">OpenRouter</option><option value="self-hosted">Self-hosted compatible</option></Select></FormField>
+            <FormField label="Base URL"><Input type="url" value={form.baseUrl} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} /></FormField>
+            <FormField label="Model"><Select value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })}>{models.map((model) => <option key={model} value={model}>{model}</option>)}</Select></FormField>
             <FormField label="API key" helper={selectedProvider ? 'Leave blank to keep the currently stored key.' : 'Stored encrypted at rest.'}><Input value={form.apiKey} onChange={(event) => setForm({ ...form, apiKey: event.target.value })} type="password" /></FormField>
             <FormField label="Enabled"><Select value={String(form.enabled)} onChange={(event) => setForm({ ...form, enabled: event.target.value === 'true' })}><option value="true">Enabled</option><option value="false">Disabled</option></Select></FormField>
             <FormField label="Timeout seconds"><Input type="number" value={form.timeoutSeconds} onChange={(event) => setForm({ ...form, timeoutSeconds: Number(event.target.value) })} /></FormField>
@@ -158,6 +180,7 @@ export function ProviderManager({ initialProviders }: { initialProviders: AiProv
             <FormField label="Temperature"><Input type="number" step="0.1" value={form.temperature} onChange={(event) => setForm({ ...form, temperature: Number(event.target.value) })} /></FormField>
           </div>
           <div className="flex flex-wrap justify-end gap-3">
+            {selectedProvider ? <Button variant="ghost" onClick={() => void handleLoadModels()}>Load models</Button> : null}
             {selectedProvider ? <Button variant="ghost" onClick={() => void handleTest(selectedProvider.id)}><Power className="mr-2 h-4 w-4" />Test connection</Button> : null}
             <Button onClick={() => void handleSave()}>{selectedProvider ? 'Update provider' : 'Create provider'}</Button>
           </div>

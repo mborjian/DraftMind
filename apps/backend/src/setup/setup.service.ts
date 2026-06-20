@@ -1,10 +1,12 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { AiProvidersService } from '../ai-providers/ai-providers.service';
 import { AuthMode } from '../common/enums/auth-mode.enum';
 import { DatabaseService } from '../database/database.service';
 import { SecretsService } from '../secrets/secrets.service';
 import { SettingsService } from '../settings/settings.service';
 import { AuthService } from '../auth/auth.service';
 import { CompleteSetupDto } from './dto/complete-setup.dto';
+import { SetupAiProviderTestDto } from './dto/setup-ai-provider-test.dto';
 
 @Injectable()
 export class SetupService {
@@ -13,6 +15,7 @@ export class SetupService {
     private readonly settingsService: SettingsService,
     private readonly secretsService: SecretsService,
     private readonly authService: AuthService,
+    private readonly aiProvidersService: AiProvidersService,
   ) {}
 
   getStatus() {
@@ -97,5 +100,9 @@ export class SetupService {
     }
 
     return this.settingsService.getSettings();
+  }
+
+  testProviderConfiguration(dto: SetupAiProviderTestDto) {
+    return this.aiProvidersService.probeProvider(dto);
   }
 }

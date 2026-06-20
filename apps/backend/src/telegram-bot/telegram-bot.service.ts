@@ -179,7 +179,7 @@ export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
       const chatId = String(ctx.chat.id);
 
       if (!settings.ownerTelegramChatId) {
-        this.settingsService.updateSettings({ ownerTelegramChatId: chatId });
+        await this.settingsService.updateSettings({ ownerTelegramChatId: chatId });
       }
 
       if (text === '/start') {

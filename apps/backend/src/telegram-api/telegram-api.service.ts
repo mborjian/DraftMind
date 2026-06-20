@@ -72,7 +72,7 @@ export class TelegramApiService {
     };
   }
 
-  updateTelegramConfiguration(dto: UpdateTelegramDto) {
+  async updateTelegramConfiguration(dto: UpdateTelegramDto) {
     const current = this.databaseService.get<SecretsRow>('SELECT * FROM Secrets WHERE id = 1');
     this.databaseService.run(
       `UPDATE Secrets SET telegramApiId = ?, telegramApiHashEncrypted = ?, telegramSessionEncrypted = ?,
@@ -86,7 +86,7 @@ export class TelegramApiService {
       ],
     );
 
-    this.settingsService.updateSettings({
+    await this.settingsService.updateSettings({
       ownerTelegramChatId: dto.ownerTelegramChatId,
       telegramBotUsername: dto.telegramBotUsername,
     });

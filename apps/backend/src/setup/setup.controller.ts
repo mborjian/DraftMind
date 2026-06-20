@@ -1,5 +1,6 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { CompleteSetupDto } from './dto/complete-setup.dto';
+import { SetupAiProviderTestDto } from './dto/setup-ai-provider-test.dto';
 import { SetupService } from './setup.service';
 
 @Controller('setup')
@@ -19,6 +20,14 @@ export class SetupController {
     return {
       success: true,
       data: await this.setupService.completeSetup(dto),
+    };
+  }
+
+  @Post('test-provider')
+  async testProvider(@Body() dto: SetupAiProviderTestDto) {
+    return {
+      success: true,
+      data: await this.setupService.testProviderConfiguration(dto),
     };
   }
 }

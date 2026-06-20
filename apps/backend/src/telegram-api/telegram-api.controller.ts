@@ -14,8 +14,8 @@ export class TelegramApiController {
   }
 
   @Put()
-  updateConfig(@Body() dto: UpdateTelegramDto) {
-    return { success: true, data: this.telegramApiService.updateTelegramConfiguration(dto) };
+  async updateConfig(@Body() dto: UpdateTelegramDto) {
+    return { success: true, data: await this.telegramApiService.updateTelegramConfiguration(dto) };
   }
 
   @Post('test-api')

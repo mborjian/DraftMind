@@ -27,6 +27,11 @@ export class UpdateSettingsDto {
   authMode?: AuthMode;
 
   @IsOptional()
+  @IsString()
+  @Min(8)
+  password?: string;
+
+  @IsOptional()
   @IsInt()
   @Min(5)
   sessionDurationMinutes?: number;

@@ -20,6 +20,15 @@ interface AiProviderRow {
   updatedAt: string;
 }
 
+interface ProviderProbeInput {
+  name: string;
+  providerType: string;
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  timeoutSeconds?: number;
+}
+
 @Injectable()
 export class AiProvidersService {
   constructor(
@@ -131,19 +140,19 @@ export class AiProvidersService {
     }
 
     try {
-      const response = await request(provider.baseUrl, {
-        method: 'GET',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          Accept: 'application/json',
-        },
-        headersTimeout: provider.timeoutSeconds * 1000,
-        bodyTimeout: provider.timeoutSeconds * 1000,
+      const response = await this.fetchModelsResponse({
+        providerType: provider.providerType,
+        baseUrl: provider.baseUrl,
+        apiKey,
+        timeoutSeconds: provider.timeoutSeconds,
       });
+
+      const models = await this.extractModelIds(response);
 
       return {
         success: response.statusCode >= 200 && response.statusCode < 500,
         statusCode: response.statusCode,
+        models,
         provider: this.serialize(provider),
       };
     } catch (error) {
@@ -151,9 +160,109 @@ export class AiProvidersService {
         success: false,
         statusCode: 0,
         error: error instanceof Error ? error.message : 'Unknown connectivity error',
+        models: [],
         provider: this.serialize(provider),
       };
     }
+  }
+
+  async listModelsForProvider(id: number) {
+    const provider = this.databaseService.get<AiProviderRow>('SELECT * FROM AIProvider WHERE id = ?', [id]);
+    if (!provider) {
+      throw new NotFoundException('AI provider was not found.');
+    }
+
+    const apiKey = this.secretsService.decrypt(provider.apiKeyEncrypted);
+    if (!apiKey) {
+      throw new BadRequestException('Provider API key is not configured.');
+    }
+
+    const response = await this.fetchModelsResponse({
+      providerType: provider.providerType,
+      baseUrl: provider.baseUrl,
+      apiKey,
+      timeoutSeconds: provider.timeoutSeconds,
+    });
+
+    return this.extractModelIds(response);
+  }
+
+  async probeProvider(input: ProviderProbeInput) {
+    if (!input.apiKey?.trim()) {
+      throw new BadRequestException('Provider API key is required.');
+    }
+
+    const response = await this.fetchModelsResponse({
+      providerType: input.providerType,
+      baseUrl: input.baseUrl,
+      apiKey: input.apiKey,
+      timeoutSeconds: input.timeoutSeconds ?? 60,
+    });
+
+    const models = await this.extractModelIds(response);
+    return {
+      success: response.statusCode >= 200 && response.statusCode < 500,
+      statusCode: response.statusCode,
+      models,
+      provider: {
+        name: input.name,
+        providerType: input.providerType,
+        baseUrl: input.baseUrl,
+        model: input.model,
+      },
+    };
+  }
+
+  private async fetchModelsResponse(input: {
+    providerType: string;
+    baseUrl: string;
+    apiKey: string;
+    timeoutSeconds: number;
+  }) {
+    const endpoint = this.resolveModelsUrl(input.baseUrl, input.providerType);
+    return request(endpoint, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${input.apiKey}`,
+        Accept: 'application/json',
+      },
+      headersTimeout: input.timeoutSeconds * 1000,
+      bodyTimeout: input.timeoutSeconds * 1000,
+    });
+  }
+
+  private resolveModelsUrl(baseUrl: string, providerType: string): string {
+    const normalized = baseUrl.replace(/\/+$/, '');
+    if (normalized.endsWith('/models')) {
+      return normalized;
+    }
+    if (normalized.endsWith('/v1')) {
+      return `${normalized}/models`;
+    }
+    if (providerType === 'openai-compatible' || providerType === 'openrouter' || providerType === 'self-hosted') {
+      return `${normalized}/v1/models`;
+    }
+
+    return `${normalized}/models`;
+  }
+
+  private async extractModelIds(response: Awaited<ReturnType<typeof request>>) {
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      return [];
+    }
+
+    const payload = (await response.body.json().catch(() => null)) as
+      | null
+      | { data?: Array<{ id?: string; name?: string }> };
+
+    if (!payload?.data || !Array.isArray(payload.data)) {
+      return [];
+    }
+
+    return payload.data
+      .map((entry) => (typeof entry.id === 'string' && entry.id.trim() ? entry.id.trim() : typeof entry.name === 'string' ? entry.name.trim() : ''))
+      .filter((entry) => entry.length > 0)
+      .sort((left, right) => left.localeCompare(right));
   }
 
   private serialize(provider: AiProviderRow) {

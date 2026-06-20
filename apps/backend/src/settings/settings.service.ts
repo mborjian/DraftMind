@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import * as argon2 from 'argon2';
 import { APP_SETTINGS_ID } from '../common/constants/app.constants';
 import { DatabaseService } from '../database/database.service';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
@@ -48,11 +49,13 @@ export class SettingsService {
     return settings;
   }
 
-  updateSettings(dto: UpdateSettingsDto): Omit<AppSettingsRecord, 'passwordHash'> {
+  async updateSettings(dto: UpdateSettingsDto): Promise<Omit<AppSettingsRecord, 'passwordHash'>> {
     const current = this.getSettingsWithPasswordHash();
+    const passwordHash = dto.password ? await argon2.hash(dto.password, { type: argon2.argon2id }) : current.passwordHash;
     const next = {
       ...current,
       ...dto,
+      passwordHash,
       updatedAt: new Date().toISOString(),
     };
 

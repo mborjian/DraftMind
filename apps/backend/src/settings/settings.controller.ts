@@ -17,10 +17,10 @@ export class SettingsController {
   }
 
   @Put()
-  updateSettings(@Body() dto: UpdateSettingsDto) {
+  async updateSettings(@Body() dto: UpdateSettingsDto) {
     return {
       success: true,
-      data: this.settingsService.updateSettings(dto),
+      data: await this.settingsService.updateSettings(dto),
     };
   }
 }

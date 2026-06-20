@@ -26,8 +26,12 @@ export async function deleteProvider(id: number) {
 }
 
 export async function testProvider(id: number) {
-  return apiRequest<{ success: boolean; statusCode: number; provider: AiProvider }>(`/ai/providers/${id}/test`, {
+  return apiRequest<{ success: boolean; statusCode: number; models: string[]; provider: AiProvider }>(`/ai/providers/${id}/test`, {
     method: 'POST',
     body: JSON.stringify({}),
   });
+}
+
+export async function listProviderModels(id: number) {
+  return apiRequest<string[]>(`/ai/providers/${id}/models`);
 }

@@ -11,7 +11,7 @@ import { SectionHeading } from '@/components/common/section-heading';
 import { FormField } from '@/components/forms/form-field';
 import { FormSection } from '@/components/forms/form-section';
 import { handleClientError } from '@/lib/handle-client-error';
-import { completeSetup } from '@/services/setup';
+import { completeSetup, testSetupProvider } from '@/services/setup';
 
 const steps = [
   {
@@ -35,6 +35,9 @@ export default function SetupPage() {
   const router = useRouter();
   const [stepIndex, setStepIndex] = useState(0);
   const [status, setStatus] = useState<string>('Complete setup once, then continue with login and workflow configuration.');
+  const [providerModels, setProviderModels] = useState<string[]>(['gpt-4.1-mini']);
+  const [providerTested, setProviderTested] = useState(false);
+  const [testingProvider, setTestingProvider] = useState(false);
   const [form, setForm] = useState({
     appName: 'DraftMind',
     timezone: 'UTC',
@@ -60,6 +63,11 @@ export default function SetupPage() {
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
+    if (stepIndex === 2 && !providerTested) {
+      setStatus('Test the AI provider connection before completing setup so the model list can be confirmed.');
+      return;
+    }
 
     if (!isLastStep) {
       const nextStepIndex = Math.min(stepIndex + 1, steps.length - 1);
@@ -103,6 +111,35 @@ export default function SetupPage() {
       router.push('/login');
     } catch (error) {
       setStatus(handleClientError(error, router, 'Setup failed.'));
+    }
+  }
+
+  async function handleProviderTest() {
+    setTestingProvider(true);
+    setStatus('Testing AI provider connection and loading models...');
+
+    try {
+      const result = await testSetupProvider({
+        name: form.providerName,
+        providerType: form.providerType,
+        baseUrl: form.providerBaseUrl,
+        model: form.providerModel,
+        apiKey: form.providerApiKey,
+        timeoutSeconds: 60,
+      });
+
+      const nextModels = result.models.length > 0 ? result.models : [form.providerModel];
+      setProviderModels(nextModels);
+      if (!nextModels.includes(form.providerModel)) {
+        setForm((current) => ({ ...current, providerModel: nextModels[0] ?? current.providerModel }));
+      }
+      setProviderTested(true);
+      setStatus(`Provider test succeeded with HTTP ${result.statusCode}. ${nextModels.length} model(s) available.`);
+    } catch (error) {
+      setProviderTested(false);
+      setStatus(handleClientError(error, router, 'Provider test failed.'));
+    } finally {
+      setTestingProvider(false);
     }
   }
 
@@ -160,14 +197,27 @@ export default function SetupPage() {
                 <FormField label="Timezone" helper="Use an IANA timezone such as `UTC` or `Asia/Tehran`.">
                   <Input value={form.timezone} onChange={(event) => setForm({ ...form, timezone: event.target.value })} placeholder="UTC" />
                 </FormField>
-                <FormField label="Locale" helper="Short UI locale such as `en`.">
-                  <Input value={form.locale} onChange={(event) => setForm({ ...form, locale: event.target.value })} placeholder="en" />
+                <FormField label="Locale" helper="Short UI locale used by the app.">
+                  <Select value={form.locale} onChange={(event) => setForm({ ...form, locale: event.target.value })}>
+                    <option value="en">English (`en`)</option>
+                    <option value="fa">Persian (`fa`)</option>
+                    <option value="ar">Arabic (`ar`)</option>
+                  </Select>
                 </FormField>
-                <FormField label="Default language" helper="Primary output language for workflows.">
-                  <Input value={form.defaultLanguage} onChange={(event) => setForm({ ...form, defaultLanguage: event.target.value })} placeholder="English" />
+                <FormField label="Default language" helper="Primary generation language for workflows.">
+                  <Select value={form.defaultLanguage} onChange={(event) => setForm({ ...form, defaultLanguage: event.target.value })}>
+                    <option value="English">English</option>
+                    <option value="Persian">Persian</option>
+                    <option value="Arabic">Arabic</option>
+                  </Select>
                 </FormField>
                 <FormField label="Session duration (minutes)" helper="Controls owner session lifetime in the web UI.">
-                  <Input value={form.sessionDurationMinutes} onChange={(event) => setForm({ ...form, sessionDurationMinutes: event.target.value })} placeholder="720" inputMode="numeric" />
+                  <Select value={form.sessionDurationMinutes} onChange={(event) => setForm({ ...form, sessionDurationMinutes: event.target.value })}>
+                    <option value="60">60 minutes</option>
+                    <option value="240">4 hours</option>
+                    <option value="720">12 hours</option>
+                    <option value="1440">24 hours</option>
+                  </Select>
                 </FormField>
                 <FormField label="Authentication mode" helper="Choose static password or Telegram OTP for owner login.">
                   <Select value={form.authMode} onChange={(event) => setForm({ ...form, authMode: event.target.value })}>
@@ -188,10 +238,10 @@ export default function SetupPage() {
             {stepIndex === 1 ? (
               <div className="grid gap-4 md:grid-cols-2">
                 <FormField label="Telegram API ID" helper="API ID for the single collector user account.">
-                  <Input value={form.telegramApiId} onChange={(event) => setForm({ ...form, telegramApiId: event.target.value })} placeholder="1234567" inputMode="numeric" />
+                  <Input type="number" value={form.telegramApiId} onChange={(event) => setForm({ ...form, telegramApiId: event.target.value })} placeholder="1234567" inputMode="numeric" />
                 </FormField>
                 <FormField label="Telegram API hash" helper="Stored encrypted at rest.">
-                  <Input value={form.telegramApiHash} onChange={(event) => setForm({ ...form, telegramApiHash: event.target.value })} placeholder="Telegram API hash" />
+                  <Input type="password" value={form.telegramApiHash} onChange={(event) => setForm({ ...form, telegramApiHash: event.target.value })} placeholder="Telegram API hash" />
                 </FormField>
                 <FormField label="Owner Telegram chat ID" helper="Owner-only bot approvals and OTPs are delivered to this chat.">
                   <Input value={form.ownerTelegramChatId} onChange={(event) => setForm({ ...form, ownerTelegramChatId: event.target.value })} placeholder="123456789" />
@@ -214,17 +264,35 @@ export default function SetupPage() {
                   <Input value={form.providerName} onChange={(event) => setForm({ ...form, providerName: event.target.value })} placeholder="Primary provider" />
                 </FormField>
                 <FormField label="Provider type" helper="Keep this aligned with the gateway abstraction, for example `openai-compatible`.">
-                  <Input value={form.providerType} onChange={(event) => setForm({ ...form, providerType: event.target.value })} placeholder="openai-compatible" />
+                  <Select value={form.providerType} onChange={(event) => { setForm({ ...form, providerType: event.target.value }); setProviderTested(false); }}>
+                    <option value="openai-compatible">OpenAI-compatible</option>
+                    <option value="openrouter">OpenRouter</option>
+                    <option value="self-hosted">Self-hosted compatible</option>
+                  </Select>
                 </FormField>
                 <FormField label="Base URL" helper="Provider API base URL used by the backend AI gateway.">
-                  <Input value={form.providerBaseUrl} onChange={(event) => setForm({ ...form, providerBaseUrl: event.target.value })} placeholder="https://api.openai.com/v1" />
+                  <Input type="url" value={form.providerBaseUrl} onChange={(event) => { setForm({ ...form, providerBaseUrl: event.target.value }); setProviderTested(false); }} placeholder="https://api.openai.com/v1" />
                 </FormField>
-                <FormField label="Model" helper="Model identifier used for topic detection and draft generation.">
-                  <Input value={form.providerModel} onChange={(event) => setForm({ ...form, providerModel: event.target.value })} placeholder="gpt-4.1-mini" />
+                <FormField label="Model" helper="Loaded from the provider after a successful connection test.">
+                  <Select value={form.providerModel} onChange={(event) => setForm({ ...form, providerModel: event.target.value })}>
+                    {providerModels.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </Select>
                 </FormField>
                 <FormField label="Provider API key" helper="Stored encrypted and not returned in plaintext after setup." className="md:col-span-2">
-                  <Input value={form.providerApiKey} onChange={(event) => setForm({ ...form, providerApiKey: event.target.value })} placeholder="Provider API key" type="password" />
+                  <Input value={form.providerApiKey} onChange={(event) => { setForm({ ...form, providerApiKey: event.target.value }); setProviderTested(false); }} placeholder="Provider API key" type="password" />
                 </FormField>
+                <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-border/70 bg-background/50 px-4 py-4">
+                  <p className="text-sm text-muted-foreground">
+                    {providerTested ? 'Connection verified. You can now choose from the discovered model list.' : 'Test the provider to verify credentials and load available models.'}
+                  </p>
+                  <Button type="button" variant="secondary" onClick={() => void handleProviderTest()} disabled={testingProvider}>
+                    {testingProvider ? 'Testing...' : 'Test connection'}
+                  </Button>
+                </div>
               </div>
             ) : null}
           </FormSection>

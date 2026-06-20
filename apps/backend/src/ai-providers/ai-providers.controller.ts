@@ -33,4 +33,9 @@ export class AiProvidersController {
   async testProvider(@Param('id', ParseIntPipe) id: number) {
     return { success: true, data: await this.aiProvidersService.testProvider(id) };
   }
+
+  @Get(':id/models')
+  async listModels(@Param('id', ParseIntPipe) id: number) {
+    return { success: true, data: await this.aiProvidersService.listModelsForProvider(id) };
+  }
 }
