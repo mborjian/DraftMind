@@ -376,9 +376,7 @@ export default function SetupPage() {
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
       <SectionHeading
-        eyebrow="First launch"
         title="Setup wizard"
-        description="This wizard only appears on a fresh first-start setup. After completion, the app goes straight to the main home flow."
       />
 
       <div className="mt-6">
@@ -435,7 +433,7 @@ export default function SetupPage() {
 
             {stepIndex === 1 ? (
               <div className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4">
                   <FormField label="Telegram API ID" error={validation.errors.telegramApiId} helper="API ID for the Telegram account integration.">
                     <div className="flex gap-2">
                       <Input type="number" value={form.telegramApiId} onChange={(event) => updateForm('telegramApiId', event.target.value)} placeholder="1234567" inputMode="numeric" />
@@ -461,51 +459,51 @@ export default function SetupPage() {
                   </FormField>
                 </div>
 
-                <div className="border-t border-border/70 pt-4">
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <FormField label="Owner Telegram chat ID" error={validation.errors.ownerTelegramChatId} helper="Used for owner-only approvals, notifications, and OTPs.">
-                      <div className="flex gap-2">
-                        <Input value={form.ownerTelegramChatId} onChange={(event) => updateForm('ownerTelegramChatId', event.target.value)} placeholder="123456789" />
-                        <Link href="https://t.me/userinfobot" target="_blank" className="inline-flex items-center justify-center rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground transition hover:bg-secondary/80">
-                          <CircleHelp className="mr-2 h-4 w-4" />
-                          Find
-                        </Link>
-                      </div>
-                    </FormField>
-                    <FormField label="Telegram bot username" error={validation.errors.telegramBotUsername} helper="Helps confirm which bot the owner should start.">
-                      <Input value={form.telegramBotUsername} onChange={(event) => updateForm('telegramBotUsername', event.target.value)} placeholder="draftmind_bot" />
-                    </FormField>
-                    <FormField label="Telegram bot token" error={validation.errors.telegramBotToken} helper="Used for approvals, OTP, and notifications." className="md:col-span-2">
-                      <div className="relative">
-                        <Input
-                          value={form.telegramBotToken}
-                          onChange={(event) => updateForm('telegramBotToken', event.target.value)}
-                          placeholder="Telegram bot token"
-                          type={showBotToken ? 'text' : 'password'}
-                          className="pr-12"
-                        />
-                        <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowBotToken((current) => !current)}>
-                          {showBotToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    </FormField>
-                  </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <Link href="https://t.me/BotFather" target="_blank" className="inline-flex items-center justify-center rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground transition hover:bg-secondary/80">
-                      <Bot className="mr-2 h-4 w-4" />
-                      Open BotFather
-                    </Link>
-                    <Button type="button" variant="secondary" onClick={() => void handleTelegramBotTest()} disabled={testingTelegramBot}>
-                      {testingTelegramBot ? 'Testing...' : 'Test bot'}
-                    </Button>
-                    {telegramBotTested ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : null}
-                  </div>
+                <hr/>
+
+                <div className="grid gap-4">
+                  <FormField label="Owner Telegram chat ID" error={validation.errors.ownerTelegramChatId} helper="Used for owner-only approvals, notifications, and OTPs.">
+                    <div className="flex gap-2">
+                      <Input value={form.ownerTelegramChatId} onChange={(event) => updateForm('ownerTelegramChatId', event.target.value)} placeholder="123456789" />
+                      <Link href="https://t.me/userinfobot" target="_blank" className="inline-flex items-center justify-center rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground transition hover:bg-secondary/80">
+                        <CircleHelp className="mr-2 h-4 w-4" />
+                        Find
+                      </Link>
+                    </div>
+                  </FormField>
+                  <FormField label="Telegram bot username" error={validation.errors.telegramBotUsername} helper="Helps confirm which bot the owner should start.">
+                    <Input value={form.telegramBotUsername} onChange={(event) => updateForm('telegramBotUsername', event.target.value)} placeholder="draftmind_bot" />
+                  </FormField>
+                  <FormField label="Telegram bot token" error={validation.errors.telegramBotToken} helper="Used for approvals, OTP, and notifications." className="md:col-span-2">
+                    <div className="relative">
+                      <Input
+                        value={form.telegramBotToken}
+                        onChange={(event) => updateForm('telegramBotToken', event.target.value)}
+                        placeholder="Telegram bot token"
+                        type={showBotToken ? 'text' : 'password'}
+                        className="pr-12"
+                      />
+                      <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowBotToken((current) => !current)}>
+                        {showBotToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </FormField>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <Link href="https://t.me/BotFather" target="_blank" className="inline-flex items-center justify-center rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground transition hover:bg-secondary/80">
+                    <Bot className="mr-2 h-4 w-4" />
+                    Open BotFather
+                  </Link>
+                  <Button type="button" variant="secondary" onClick={() => void handleTelegramBotTest()} disabled={testingTelegramBot}>
+                    {testingTelegramBot ? 'Testing...' : 'Test bot'}
+                  </Button>
+                  {telegramBotTested ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : null}
                 </div>
               </div>
             ) : null}
 
             {stepIndex === 2 ? (
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className="grid gap-4">
                 <FormField label="Provider" helper="Choose the provider type that the backend should use.">
                   <select
                     value={form.providerType}
@@ -621,21 +619,13 @@ export default function SetupPage() {
             ) : null}
           </FormSection>
 
-          <div className="flex items-center justify-between gap-4 rounded-[1.75rem] border border-border/70 bg-card/85 p-5">
-            <div className="space-y-1">
-              <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                Step {stepIndex + 1} of {steps.length}
-              </p>
-              <p className="text-sm text-muted-foreground">{status}</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button type="button" variant="secondary" onClick={goToPreviousStep} disabled={stepIndex === 0}>
-                Back
-              </Button>
-              <Button type="submit" disabled={!validation.currentStepValid}>
-                {isLastStep ? 'Complete setup' : 'Continue'}
-              </Button>
-            </div>
+          <div className="flex items-center justify-end gap-4 rounded-[1.75rem] border border-border/70 bg-card/85 p-5">
+            <Button type="button" variant="secondary" onClick={goToPreviousStep} disabled={stepIndex === 0}>
+              Back
+            </Button>
+            <Button type="submit" disabled={!validation.currentStepValid}>
+              {isLastStep ? 'Complete setup' : 'Continue'}
+            </Button>
           </div>
         </form>
       </div>
