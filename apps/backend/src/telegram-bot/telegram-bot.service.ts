@@ -46,7 +46,10 @@ export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    await this.ensureStarted();
+    void this.ensureStarted().catch((error) => {
+      const message = error instanceof Error ? error.message : 'Unknown Telegram bot startup failure.';
+      this.logsService.error(`Telegram management bot startup failed: ${message}`, undefined, TelegramBotService.name);
+    });
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -137,6 +140,43 @@ export class TelegramBotService implements OnModuleInit, OnModuleDestroy {
 
   async sendOperationalNotification(chatId: string, message: string) {
     return this.sendMessage(chatId, message);
+  }
+
+  async sendSetupTestMessage(token: string, chatId: string, message: string) {
+    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        link_preview_options: {
+          is_disabled: true,
+        },
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    const payload = (await response.json().catch(() => null)) as
+      | null
+      | {
+          ok?: boolean;
+          description?: string;
+          result?: { message_id?: number };
+        };
+
+    if (!response.ok || payload?.ok !== true) {
+      throw new Error(payload?.description ?? 'Telegram bot could not send the test message.');
+    }
+
+    return {
+      delivered: true,
+      chatId,
+      messageId: String(payload.result?.message_id ?? ''),
+      preview: message.slice(0, 80),
+    };
   }
 
   async sendExecutionSummary(chatId: string, execution: {

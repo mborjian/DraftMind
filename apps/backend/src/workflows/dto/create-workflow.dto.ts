@@ -58,6 +58,11 @@ export class CreateWorkflowDto {
   aiProviderId?: number | null;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  aiModel?: string | null;
+
+  @IsOptional()
   aiPreferencesId?: number | null;
 
   @IsString()

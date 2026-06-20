@@ -42,7 +42,7 @@ export async function serverApiRequest<T>(path: string, init?: RequestInit): Pro
 
 export async function requireSetupState(): Promise<{ initialized: boolean; authMode: string }> {
   return serverApiRequest<{ initialized: boolean; authMode: string }>('/setup/status')
-    .catch(() => ({ initialized: false, authMode: 'password' }));
+    .catch(() => ({ initialized: false, authMode: 'none' }));
 }
 
 export async function requireSessionOrRedirect(): Promise<void> {

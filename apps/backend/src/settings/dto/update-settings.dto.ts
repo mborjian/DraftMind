@@ -1,4 +1,4 @@
-import { IsEnum, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { AuthMode } from '../../common/enums/auth-mode.enum';
 
 export class UpdateSettingsDto {
@@ -23,6 +23,9 @@ export class UpdateSettingsDto {
   defaultLanguage?: string;
 
   @IsOptional()
+  setupCompleted?: number;
+
+  @IsOptional()
   @IsEnum(AuthMode)
   authMode?: AuthMode;
 
@@ -30,11 +33,6 @@ export class UpdateSettingsDto {
   @IsString()
   @Min(8)
   password?: string;
-
-  @IsOptional()
-  @IsInt()
-  @Min(5)
-  sessionDurationMinutes?: number;
 
   @IsOptional()
   defaultAiProviderId?: number | null;

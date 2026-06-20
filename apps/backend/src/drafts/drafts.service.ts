@@ -139,8 +139,9 @@ export class DraftsService {
       timezone: string;
       userPrompt: string;
       aiProviderId: number | null;
+      aiModel: string | null;
       aiPreferencesId: number | null;
-    }>('SELECT id, name, description, timezone, userPrompt, aiProviderId, aiPreferencesId FROM Workflow WHERE id = ?', [execution.workflowId]);
+    }>('SELECT id, name, description, timezone, userPrompt, aiProviderId, aiModel, aiPreferencesId FROM Workflow WHERE id = ?', [execution.workflowId]);
     if (!workflow || !workflow.aiProviderId) {
       throw new NotFoundException('The workflow AI provider is not configured.');
     }
@@ -182,6 +183,7 @@ export class DraftsService {
 
     const aiResult = await this.aiService.generate({
       providerId: workflow.aiProviderId,
+      model: workflow.aiModel,
       purpose: options?.regenerate ? 'draft-regeneration' : 'draft-generation',
       workflowId: workflow.id,
       executionId: topic.executionId,

@@ -7,6 +7,10 @@ export default async function AuthLayout({ children }: Readonly<{ children: Reac
     redirect('/setup');
   }
 
+  if (setup.authMode === 'none') {
+    redirect('/dashboard');
+  }
+
   try {
     await serverApiRequest('/auth/session');
     redirect('/dashboard');

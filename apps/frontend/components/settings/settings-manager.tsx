@@ -21,7 +21,6 @@ export function SettingsManager({ initialSettings, providers }: { initialSetting
     defaultLanguage: initialSettings.defaultLanguage,
     authMode: initialSettings.authMode,
     password: '',
-    sessionDurationMinutes: initialSettings.sessionDurationMinutes,
     defaultAiProviderId: initialSettings.defaultAiProviderId ? String(initialSettings.defaultAiProviderId) : '',
     defaultSchedulingCron: initialSettings.defaultSchedulingCron ?? '',
     ownerTelegramChatId: initialSettings.ownerTelegramChatId ?? '',
@@ -34,7 +33,6 @@ export function SettingsManager({ initialSettings, providers }: { initialSetting
     try {
       await updateSettings({
         ...form,
-        sessionDurationMinutes: Number(form.sessionDurationMinutes),
         defaultAiProviderId: form.defaultAiProviderId ? Number(form.defaultAiProviderId) : null,
         defaultSchedulingCron: form.defaultSchedulingCron || null,
         password: form.password || undefined,
@@ -50,16 +48,13 @@ export function SettingsManager({ initialSettings, providers }: { initialSetting
 
   return (
     <div className="space-y-8">
-      <SectionHeading eyebrow="Configuration" title="Settings" description="Global application defaults, authentication mode, locale, and owner runtime configuration." />
+      <SectionHeading eyebrow="Configuration" title="Settings" description="Global application defaults, authentication mode, and owner runtime configuration." />
       <FormSection title="Global defaults" description={status}>
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <FormField label="Application name"><Input value={form.appName} onChange={(event) => setForm({ ...form, appName: event.target.value })} /></FormField>
           <FormField label="Timezone"><Input value={form.timezone} onChange={(event) => setForm({ ...form, timezone: event.target.value })} /></FormField>
-          <FormField label="Locale"><Select value={form.locale} onChange={(event) => setForm({ ...form, locale: event.target.value })}><option value="en">English (`en`)</option><option value="fa">Persian (`fa`)</option><option value="ar">Arabic (`ar`)</option></Select></FormField>
-          <FormField label="Default language"><Select value={form.defaultLanguage} onChange={(event) => setForm({ ...form, defaultLanguage: event.target.value })}><option value="English">English</option><option value="Persian">Persian</option><option value="Arabic">Arabic</option></Select></FormField>
-          <FormField label="Authentication mode"><Select value={form.authMode} onChange={(event) => setForm({ ...form, authMode: event.target.value })}><option value="password">Password</option><option value="telegram-otp">Telegram OTP</option></Select></FormField>
+          <FormField label="Authentication mode"><Select value={form.authMode} onChange={(event) => setForm({ ...form, authMode: event.target.value })}><option value="none">No auth</option><option value="password">Password</option><option value="telegram-otp">Telegram OTP</option></Select></FormField>
           <FormField label="Owner password" helper="Leave blank to keep the current password."><Input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} /></FormField>
-          <FormField label="Session duration (minutes)"><Select value={String(form.sessionDurationMinutes)} onChange={(event) => setForm({ ...form, sessionDurationMinutes: Number(event.target.value) })}><option value="60">60 minutes</option><option value="240">4 hours</option><option value="720">12 hours</option><option value="1440">24 hours</option></Select></FormField>
           <FormField label="Default AI provider"><Select value={form.defaultAiProviderId} onChange={(event) => setForm({ ...form, defaultAiProviderId: event.target.value })}><option value="">None</option>{providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}</Select></FormField>
           <FormField label="Default schedule cron"><Input value={form.defaultSchedulingCron} onChange={(event) => setForm({ ...form, defaultSchedulingCron: event.target.value })} /></FormField>
           <FormField label="Owner Telegram chat ID"><Input value={form.ownerTelegramChatId} onChange={(event) => setForm({ ...form, ownerTelegramChatId: event.target.value })} /></FormField>

@@ -8,13 +8,15 @@ export default async function AppLayout({ children }: Readonly<{ children: React
     redirect('/setup');
   }
 
-  try {
-    await serverApiRequest('/auth/session');
-  } catch (error) {
-    if (error instanceof Error && error.message === 'UNAUTHORIZED') {
-      redirect('/login');
+  if (setup.authMode !== 'none') {
+    try {
+      await serverApiRequest('/auth/session');
+    } catch (error) {
+      if (error instanceof Error && error.message === 'UNAUTHORIZED') {
+        redirect('/login');
+      }
+      throw error;
     }
-    throw error;
   }
 
   return <AppShell>{children}</AppShell>;

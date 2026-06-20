@@ -10,6 +10,7 @@ export interface AppSettingsRecord {
   timezone: string;
   locale: string;
   defaultLanguage: string;
+  setupCompleted: number;
   authMode: string;
   passwordHash: string | null;
   sessionDurationMinutes: number;
@@ -27,7 +28,7 @@ export class SettingsService {
 
   getSettings(): Omit<AppSettingsRecord, 'passwordHash'> {
     const settings = this.databaseService.get<AppSettingsRecord>(
-      `SELECT id, appName, timezone, locale, defaultLanguage, authMode, sessionDurationMinutes,
+      `SELECT id, appName, timezone, locale, defaultLanguage, setupCompleted, authMode, sessionDurationMinutes,
         defaultAiProviderId, defaultSchedulingCron, ownerTelegramChatId, telegramBotUsername,
         createdAt, updatedAt
        FROM AppSettings WHERE id = ?`,
@@ -61,7 +62,7 @@ export class SettingsService {
 
     this.databaseService.run(
       `UPDATE AppSettings SET
-        appName = ?, timezone = ?, locale = ?, defaultLanguage = ?, authMode = ?,
+        appName = ?, timezone = ?, locale = ?, defaultLanguage = ?, setupCompleted = ?, authMode = ?,
         passwordHash = ?, sessionDurationMinutes = ?, defaultAiProviderId = ?,
         defaultSchedulingCron = ?, ownerTelegramChatId = ?, telegramBotUsername = ?, updatedAt = ?
       WHERE id = ?`,
@@ -70,6 +71,7 @@ export class SettingsService {
         next.timezone,
         next.locale,
         next.defaultLanguage,
+        next.setupCompleted,
         next.authMode,
         next.passwordHash,
         next.sessionDurationMinutes,

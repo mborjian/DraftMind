@@ -7,6 +7,7 @@ export interface AiChatMessage {
 
 export interface AiGenerateRequest {
   providerId: number;
+  model?: string | null;
   purpose: string;
   messages: AiChatMessage[];
   workflowId?: number | null;

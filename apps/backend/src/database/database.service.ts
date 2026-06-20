@@ -94,6 +94,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         timezone TEXT NOT NULL,
         locale TEXT NOT NULL,
         defaultLanguage TEXT NOT NULL,
+        setupCompleted INTEGER NOT NULL DEFAULT 0,
         authMode TEXT NOT NULL,
         passwordHash TEXT NULL,
         sessionDurationMinutes INTEGER NOT NULL,
@@ -180,6 +181,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         publishMode TEXT NOT NULL,
         publishIntervalMinutes INTEGER NOT NULL DEFAULT 0,
         aiProviderId INTEGER NULL,
+        aiModel TEXT NULL,
         aiPreferencesId INTEGER NULL,
         userPrompt TEXT NOT NULL,
         createdAt TEXT NOT NULL,
@@ -332,6 +334,21 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         createdAt TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS SetupOtpTest (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        code TEXT NOT NULL,
+        ownerTelegramChatId TEXT NOT NULL,
+        expiresAt TEXT NOT NULL,
+        used INTEGER NOT NULL DEFAULT 0,
+        createdAt TEXT NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS SetupBotTest (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ownerTelegramChatId TEXT NOT NULL,
+        createdAt TEXT NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS Session (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         token TEXT NOT NULL,
@@ -349,6 +366,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       CREATE INDEX IF NOT EXISTS idx_execution_workflow_started ON WorkflowExecution(workflowId, startedAt);
       CREATE INDEX IF NOT EXISTS idx_workflow_state_next_run ON WorkflowState(nextRunAt);
     `);
+
+    this.ensureColumn('AppSettings', 'setupCompleted', 'INTEGER NOT NULL DEFAULT 0');
+    this.ensureColumn('Workflow', 'aiModel', 'TEXT NULL');
   }
 
   private seedDefaults(): void {
@@ -357,16 +377,17 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     if (!appSettingsExists) {
       this.run(
         `INSERT INTO AppSettings (
-          id, appName, timezone, locale, defaultLanguage, authMode, passwordHash,
+          id, appName, timezone, locale, defaultLanguage, setupCompleted, authMode, passwordHash,
           sessionDurationMinutes, defaultAiProviderId, defaultSchedulingCron, ownerTelegramChatId,
           telegramBotUsername, createdAt, updatedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           APP_SETTINGS_ID,
           'DraftMind',
           'UTC',
           'en',
           'English',
+          0,
           AuthMode.Password,
           null,
           DEFAULT_SESSION_DURATION_MINUTES,
@@ -401,6 +422,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         'INSERT INTO SystemPrompt (name, content, enabled, version, updatedAt) VALUES (?, ?, ?, ?, ?)',
         [DEFAULT_SYSTEM_PROMPT_NAME, promptContent, 1, DEFAULT_SYSTEM_PROMPT_VERSION, now],
       );
+    }
+  }
+
+  private ensureColumn(tableName: string, columnName: string, definition: string): void {
+    const columns = this.all<{ name: string }>(`PRAGMA table_info(${tableName})`);
+    const exists = columns.some((column) => column.name === columnName);
+    if (!exists) {
+      this.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
     }
   }
 }

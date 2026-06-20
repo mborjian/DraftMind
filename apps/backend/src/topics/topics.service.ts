@@ -64,8 +64,9 @@ export class TopicsService {
       timezone: string;
       userPrompt: string;
       aiProviderId: number | null;
+      aiModel: string | null;
       aiPreferencesId: number | null;
-    }>('SELECT id, name, description, timezone, userPrompt, aiProviderId, aiPreferencesId FROM Workflow WHERE id = ?', [execution.workflowId]);
+    }>('SELECT id, name, description, timezone, userPrompt, aiProviderId, aiModel, aiPreferencesId FROM Workflow WHERE id = ?', [execution.workflowId]);
     if (!workflow) {
       throw new NotFoundException('Workflow was not found for topic detection.');
     }
@@ -96,6 +97,7 @@ export class TopicsService {
 
     const response = await this.aiService.generate({
       providerId: workflow.aiProviderId,
+      model: workflow.aiModel,
       purpose: 'topic-detection',
       workflowId: workflow.id,
       executionId,

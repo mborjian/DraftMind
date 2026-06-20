@@ -13,22 +13,26 @@ import { Type } from 'class-transformer';
 import { AuthMode } from '../../common/enums/auth-mode.enum';
 
 class SetupAiProviderDto {
+  @IsOptional()
   @IsString()
   @MaxLength(120)
-  name!: string;
+  name?: string;
 
   @IsString()
   @MaxLength(60)
   providerType!: string;
 
+  @IsOptional()
   @IsUrl({ require_tld: false })
-  baseUrl!: string;
+  baseUrl?: string;
 
+  @IsOptional()
   @IsString()
-  model!: string;
+  model?: string;
 
+  @IsOptional()
   @IsString()
-  apiKey!: string;
+  apiKey?: string;
 
   @IsOptional()
   @IsInt()
@@ -53,25 +57,23 @@ export class CompleteSetupDto {
   @MaxLength(100)
   timezone!: string;
 
+  @IsOptional()
   @IsString()
   @MaxLength(32)
-  locale!: string;
+  locale?: string;
 
+  @IsOptional()
   @IsString()
   @MaxLength(64)
-  defaultLanguage!: string;
+  defaultLanguage?: string;
 
   @IsEnum(AuthMode)
   authMode!: AuthMode;
 
   @IsOptional()
   @IsString()
-  @Min(8)
+  @MaxLength(255)
   password?: string;
-
-  @IsInt()
-  @Min(5)
-  sessionDurationMinutes!: number;
 
   @IsOptional()
   telegramApiId?: number | null;
@@ -79,10 +81,6 @@ export class CompleteSetupDto {
   @IsOptional()
   @IsString()
   telegramApiHash?: string | null;
-
-  @IsOptional()
-  @IsString()
-  telegramSession?: string | null;
 
   @IsOptional()
   @IsString()

@@ -39,6 +39,7 @@ const emptyWorkflow = {
   publishMode: 'scheduled',
   publishIntervalMinutes: 0,
   aiProviderId: '',
+  aiModel: '',
   aiPreferencesId: '',
   userPrompt: '',
   sources: [{ ...emptyChat }],
@@ -73,6 +74,7 @@ export function WorkflowManager({ initialWorkflows, providers, preferences }: Wo
       publishMode: workflow.publishMode,
       publishIntervalMinutes: workflow.publishIntervalMinutes,
       aiProviderId: workflow.aiProviderId ? String(workflow.aiProviderId) : '',
+      aiModel: workflow.aiModel ?? '',
       aiPreferencesId: workflow.aiPreferencesId ? String(workflow.aiPreferencesId) : '',
       userPrompt: workflow.userPrompt,
       sources: workflow.sources.length > 0
@@ -107,6 +109,7 @@ export function WorkflowManager({ initialWorkflows, providers, preferences }: Wo
       publishMode: form.publishMode,
       publishIntervalMinutes: Number(form.publishIntervalMinutes),
       aiProviderId: form.aiProviderId ? Number(form.aiProviderId) : null,
+      aiModel: form.aiModel || null,
       aiPreferencesId: form.aiPreferencesId ? Number(form.aiPreferencesId) : null,
       userPrompt: form.userPrompt,
       sources: form.sources.filter((source) => source.telegramChatId && source.title),
@@ -302,6 +305,9 @@ export function WorkflowManager({ initialWorkflows, providers, preferences }: Wo
                   <option value="">Select provider</option>
                   {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
                 </Select>
+              </FormField>
+              <FormField label="Model" helper="Set the model at the workflow layer.">
+                <Input value={form.aiModel} onChange={(event) => setForm({ ...form, aiModel: event.target.value })} placeholder="gpt-4.1-mini, gemini-2.5-flash, claude-sonnet..." />
               </FormField>
               <FormField label="AI preferences">
                 <Select value={form.aiPreferencesId} onChange={(event) => setForm({ ...form, aiPreferencesId: event.target.value })}>

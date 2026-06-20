@@ -21,6 +21,7 @@ export interface AppSettings {
   timezone: string;
   locale: string;
   defaultLanguage: string;
+  setupCompleted: number;
   authMode: string;
   sessionDurationMinutes: number;
   defaultAiProviderId: number | null;
@@ -119,6 +120,7 @@ export interface Workflow {
   publishMode: string;
   publishIntervalMinutes: number;
   aiProviderId: number | null;
+  aiModel: string | null;
   aiPreferencesId: number | null;
   userPrompt: string;
   createdAt: string;

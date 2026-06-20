@@ -17,9 +17,9 @@ import { createProvider, deleteProvider, listProviderModels, testProvider, updat
 
 const emptyProvider = {
   name: '',
-  providerType: 'openai-compatible',
+  providerType: 'openai',
   baseUrl: 'https://api.openai.com/v1',
-  model: 'gpt-4.1-mini',
+  model: 'workflow-selected',
   apiKey: '',
   enabled: true,
   timeoutSeconds: 60,
@@ -33,7 +33,7 @@ export function ProviderManager({ initialProviders }: { initialProviders: AiProv
   const [selectedProviderId, setSelectedProviderId] = useState<number | 'new'>(initialProviders[0]?.id ?? 'new');
   const [form, setForm] = useState(emptyProvider);
   const [models, setModels] = useState<string[]>([emptyProvider.model]);
-  const [status, setStatus] = useState('Configure provider endpoints, credentials, and model defaults.');
+  const [status, setStatus] = useState('Configure provider endpoints and credentials. Models are selected per workflow.');
 
   const selectedProvider = providers.find((provider) => provider.id === selectedProviderId) ?? null;
 
@@ -155,7 +155,7 @@ export function ProviderManager({ initialProviders }: { initialProviders: AiProv
                   <Badge>{provider.enabled ? 'Enabled' : 'Disabled'}</Badge>
                 </div>
                 <div className="grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                  <p>Model: {provider.model}</p>
+                  <p>Model mode: {provider.model}</p>
                   <p>API key: {provider.hasApiKey ? 'Stored securely' : 'Missing'}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -170,9 +170,9 @@ export function ProviderManager({ initialProviders }: { initialProviders: AiProv
         <FormSection title={selectedProvider ? `Edit ${selectedProvider.name}` : 'Create provider'} description={status}>
           <div className="grid gap-4 md:grid-cols-2">
             <FormField label="Name"><Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></FormField>
-            <FormField label="Provider type"><Select value={form.providerType} onChange={(event) => setForm({ ...form, providerType: event.target.value })}><option value="openai-compatible">OpenAI-compatible</option><option value="openrouter">OpenRouter</option><option value="self-hosted">Self-hosted compatible</option></Select></FormField>
+            <FormField label="Provider type"><Select value={form.providerType} onChange={(event) => setForm({ ...form, providerType: event.target.value })}><option value="openai">OpenAI</option><option value="anthropic">Anthropic</option><option value="gemini">Gemini</option><option value="openai-compatible">OpenAI-compatible</option><option value="lm-studio">LM Studio</option><option value="ollama">Ollama</option></Select></FormField>
             <FormField label="Base URL"><Input type="url" value={form.baseUrl} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} /></FormField>
-            <FormField label="Model"><Select value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })}>{models.map((model) => <option key={model} value={model}>{model}</option>)}</Select></FormField>
+            <FormField label="Model policy" helper="Stored only as a fallback. Workflow records should choose the active model."><Input value={form.model} onChange={(event) => setForm({ ...form, model: event.target.value })} /></FormField>
             <FormField label="API key" helper={selectedProvider ? 'Leave blank to keep the currently stored key.' : 'Stored encrypted at rest.'}><Input value={form.apiKey} onChange={(event) => setForm({ ...form, apiKey: event.target.value })} type="password" /></FormField>
             <FormField label="Enabled"><Select value={String(form.enabled)} onChange={(event) => setForm({ ...form, enabled: event.target.value === 'true' })}><option value="true">Enabled</option><option value="false">Disabled</option></Select></FormField>
             <FormField label="Timeout seconds"><Input type="number" value={form.timeoutSeconds} onChange={(event) => setForm({ ...form, timeoutSeconds: Number(event.target.value) })} /></FormField>

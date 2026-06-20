@@ -17,6 +17,7 @@ interface WorkflowRow {
   publishMode: string;
   publishIntervalMinutes: number;
   aiProviderId: number | null;
+  aiModel: string | null;
   aiPreferencesId: number | null;
   userPrompt: string;
   createdAt: string;
@@ -49,9 +50,9 @@ export class WorkflowsService {
       const insert = this.databaseService.run(
         `INSERT INTO Workflow (
           name, description, enabled, cronExpression, timezone, publishMode,
-          publishIntervalMinutes, aiProviderId, aiPreferencesId, userPrompt,
+          publishIntervalMinutes, aiProviderId, aiModel, aiPreferencesId, userPrompt,
           createdAt, updatedAt, deletedAt
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           dto.name,
           dto.description ?? null,
@@ -61,6 +62,7 @@ export class WorkflowsService {
           dto.publishMode,
           dto.publishIntervalMinutes,
           dto.aiProviderId ?? null,
+          dto.aiModel?.trim() || null,
           dto.aiPreferencesId ?? null,
           dto.userPrompt,
           now,
@@ -99,7 +101,7 @@ export class WorkflowsService {
       this.databaseService.run(
         `UPDATE Workflow SET
           name = ?, description = ?, enabled = ?, cronExpression = ?, timezone = ?, publishMode = ?,
-          publishIntervalMinutes = ?, aiProviderId = ?, aiPreferencesId = ?, userPrompt = ?, updatedAt = ?
+          publishIntervalMinutes = ?, aiProviderId = ?, aiModel = ?, aiPreferencesId = ?, userPrompt = ?, updatedAt = ?
          WHERE id = ?`,
         [
           next.name,
@@ -110,6 +112,7 @@ export class WorkflowsService {
           next.publishMode,
           next.publishIntervalMinutes,
           next.aiProviderId,
+          next.aiModel,
           next.aiPreferencesId,
           next.userPrompt,
           next.updatedAt,

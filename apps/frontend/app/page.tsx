@@ -1,11 +1,15 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
-import { requireSessionOrRedirect, requireSetupState, serverApiRequest } from '@/lib/server-api';
+import { requireSetupState, serverApiRequest } from '@/lib/server-api';
 
 export default async function HomePage() {
   const setup = await requireSetupState();
   if (!setup.initialized) {
     redirect('/setup');
+  }
+
+  if (setup.authMode === 'none') {
+    redirect('/dashboard');
   }
 
   try {

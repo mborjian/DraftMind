@@ -2,21 +2,16 @@ import { IsInt, IsOptional, IsString, IsUrl, MaxLength, Min } from 'class-valida
 
 export class SetupAiProviderTestDto {
   @IsString()
-  @MaxLength(120)
-  name!: string;
-
-  @IsString()
   @MaxLength(60)
   providerType!: string;
 
+  @IsOptional()
   @IsUrl({ require_tld: false })
-  baseUrl!: string;
+  baseUrl?: string;
 
+  @IsOptional()
   @IsString()
-  model!: string;
-
-  @IsString()
-  apiKey!: string;
+  apiKey?: string;
 
   @IsOptional()
   @IsInt()

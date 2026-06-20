@@ -1,9 +1,16 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
-import { request } from 'undici';
 import { DatabaseService } from '../database/database.service';
 import { SecretsService } from '../secrets/secrets.service';
 import { CreateAiProviderDto } from './dto/create-ai-provider.dto';
 import { UpdateAiProviderDto } from './dto/update-ai-provider.dto';
+
+type ProviderType =
+  | 'openai'
+  | 'anthropic'
+  | 'gemini'
+  | 'openai-compatible'
+  | 'lm-studio'
+  | 'ollama';
 
 interface AiProviderRow {
   id: number;
@@ -21,13 +28,52 @@ interface AiProviderRow {
 }
 
 interface ProviderProbeInput {
-  name: string;
   providerType: string;
-  baseUrl: string;
-  model: string;
-  apiKey: string;
+  baseUrl?: string;
+  apiKey?: string;
   timeoutSeconds?: number;
 }
+
+interface ProviderConfig {
+  providerType: ProviderType;
+  baseUrl: string;
+  apiKey: string | null;
+  timeoutSeconds: number;
+}
+
+interface ProviderResponseSummary {
+  success: boolean;
+  statusCode: number;
+  models: string[];
+  error?: string;
+}
+
+const PROVIDER_DEFAULTS: Record<ProviderType, { baseUrl: string; requiresApiKey: boolean }> = {
+  openai: {
+    baseUrl: 'https://api.openai.com/v1',
+    requiresApiKey: true,
+  },
+  anthropic: {
+    baseUrl: 'https://api.anthropic.com',
+    requiresApiKey: true,
+  },
+  gemini: {
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    requiresApiKey: true,
+  },
+  'openai-compatible': {
+    baseUrl: 'https://api.openai.com/v1',
+    requiresApiKey: false,
+  },
+  'lm-studio': {
+    baseUrl: 'http://localhost:1234',
+    requiresApiKey: false,
+  },
+  ollama: {
+    baseUrl: 'http://localhost:11434',
+    requiresApiKey: false,
+  },
+};
 
 @Injectable()
 export class AiProvidersService {
@@ -55,6 +101,7 @@ export class AiProvidersService {
   }
 
   createProvider(dto: CreateAiProviderDto) {
+    const normalized = this.normalizeProviderInput(dto);
     const now = new Date().toISOString();
     const result = this.databaseService.run(
       `INSERT INTO AIProvider (
@@ -62,15 +109,15 @@ export class AiProvidersService {
         maxTokens, temperature, createdAt, updatedAt
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        dto.name,
-        dto.providerType,
-        dto.baseUrl,
-        dto.apiKey ? this.secretsService.encrypt(dto.apiKey) : null,
-        dto.model,
-        dto.enabled === false ? 0 : 1,
-        dto.timeoutSeconds ?? 60,
-        dto.maxTokens ?? 2048,
-        dto.temperature ?? 0.4,
+        normalized.name,
+        normalized.providerType,
+        normalized.baseUrl,
+        normalized.apiKey ? this.secretsService.encrypt(normalized.apiKey) : null,
+        normalized.model,
+        normalized.enabled === false ? 0 : 1,
+        normalized.timeoutSeconds ?? 60,
+        normalized.maxTokens ?? 2048,
+        normalized.temperature ?? 0.4,
         now,
         now,
       ],
@@ -85,16 +132,17 @@ export class AiProvidersService {
       throw new NotFoundException('AI provider was not found.');
     }
 
-    const next = {
-      ...current,
-      ...dto,
-      apiKeyEncrypted: dto.apiKey ? this.secretsService.encrypt(dto.apiKey) : current.apiKeyEncrypted,
-      enabled: dto.enabled === undefined ? current.enabled : dto.enabled ? 1 : 0,
+    const normalized = this.normalizeProviderInput({
+      name: dto.name ?? current.name,
+      providerType: dto.providerType ?? current.providerType,
+      baseUrl: dto.baseUrl ?? current.baseUrl,
+      model: dto.model ?? current.model,
+      apiKey: dto.apiKey,
+      enabled: dto.enabled ?? Boolean(current.enabled),
       timeoutSeconds: dto.timeoutSeconds ?? current.timeoutSeconds,
       maxTokens: dto.maxTokens ?? current.maxTokens,
       temperature: dto.temperature ?? current.temperature,
-      updatedAt: new Date().toISOString(),
-    };
+    });
 
     this.databaseService.run(
       `UPDATE AIProvider SET
@@ -102,16 +150,16 @@ export class AiProvidersService {
         timeoutSeconds = ?, maxTokens = ?, temperature = ?, updatedAt = ?
        WHERE id = ?`,
       [
-        next.name,
-        next.providerType,
-        next.baseUrl,
-        next.apiKeyEncrypted,
-        next.model,
-        next.enabled,
-        next.timeoutSeconds,
-        next.maxTokens,
-        next.temperature,
-        next.updatedAt,
+        normalized.name,
+        normalized.providerType,
+        normalized.baseUrl,
+        dto.apiKey === undefined ? current.apiKeyEncrypted : normalized.apiKey ? this.secretsService.encrypt(normalized.apiKey) : null,
+        normalized.model,
+        normalized.enabled === false ? 0 : 1,
+        normalized.timeoutSeconds ?? current.timeoutSeconds,
+        normalized.maxTokens ?? current.maxTokens,
+        normalized.temperature ?? current.temperature,
+        new Date().toISOString(),
         id,
       ],
     );
@@ -135,35 +183,17 @@ export class AiProvidersService {
     }
 
     const apiKey = this.secretsService.decrypt(provider.apiKeyEncrypted);
-    if (!apiKey) {
-      throw new BadRequestException('Provider API key is not configured.');
-    }
+    const summary = await this.probeProviderInternal({
+      providerType: provider.providerType,
+      baseUrl: provider.baseUrl,
+      apiKey: apiKey ?? undefined,
+      timeoutSeconds: provider.timeoutSeconds,
+    });
 
-    try {
-      const response = await this.fetchModelsResponse({
-        providerType: provider.providerType,
-        baseUrl: provider.baseUrl,
-        apiKey,
-        timeoutSeconds: provider.timeoutSeconds,
-      });
-
-      const models = await this.extractModelIds(response);
-
-      return {
-        success: response.statusCode >= 200 && response.statusCode < 500,
-        statusCode: response.statusCode,
-        models,
-        provider: this.serialize(provider),
-      };
-    } catch (error) {
-      return {
-        success: false,
-        statusCode: 0,
-        error: error instanceof Error ? error.message : 'Unknown connectivity error',
-        models: [],
-        provider: this.serialize(provider),
-      };
-    }
+    return {
+      ...summary,
+      provider: this.serialize(provider),
+    };
   }
 
   async listModelsForProvider(id: number) {
@@ -173,65 +203,174 @@ export class AiProvidersService {
     }
 
     const apiKey = this.secretsService.decrypt(provider.apiKeyEncrypted);
-    if (!apiKey) {
-      throw new BadRequestException('Provider API key is not configured.');
-    }
-
-    const response = await this.fetchModelsResponse({
+    const summary = await this.probeProviderInternal({
       providerType: provider.providerType,
       baseUrl: provider.baseUrl,
-      apiKey,
+      apiKey: apiKey ?? undefined,
       timeoutSeconds: provider.timeoutSeconds,
     });
-
-    return this.extractModelIds(response);
+    return summary.models;
   }
 
   async probeProvider(input: ProviderProbeInput) {
-    if (!input.apiKey?.trim()) {
-      throw new BadRequestException('Provider API key is required.');
+    return this.probeProviderInternal(input);
+  }
+
+  getResolvedProviderConfig(input: {
+    providerType: string;
+    baseUrl?: string | null;
+    apiKey?: string | null;
+    timeoutSeconds?: number;
+  }): ProviderConfig {
+    const providerType = this.normalizeProviderType(input.providerType);
+    const defaults = PROVIDER_DEFAULTS[providerType];
+    const baseUrl = this.normalizeBaseUrl(input.baseUrl?.trim() || defaults.baseUrl, providerType);
+    const apiKey = input.apiKey?.trim() || null;
+    const timeoutSeconds = input.timeoutSeconds ?? 60;
+
+    if (defaults.requiresApiKey && !apiKey) {
+      throw new BadRequestException('Provider API key is required for the selected provider.');
     }
 
-    const response = await this.fetchModelsResponse({
-      providerType: input.providerType,
-      baseUrl: input.baseUrl,
-      apiKey: input.apiKey,
-      timeoutSeconds: input.timeoutSeconds ?? 60,
-    });
-
-    const models = await this.extractModelIds(response);
     return {
-      success: response.statusCode >= 200 && response.statusCode < 500,
-      statusCode: response.statusCode,
-      models,
-      provider: {
-        name: input.name,
-        providerType: input.providerType,
-        baseUrl: input.baseUrl,
-        model: input.model,
-      },
+      providerType,
+      baseUrl,
+      apiKey,
+      timeoutSeconds,
     };
   }
 
-  private async fetchModelsResponse(input: {
-    providerType: string;
-    baseUrl: string;
-    apiKey: string;
-    timeoutSeconds: number;
-  }) {
-    const endpoint = this.resolveModelsUrl(input.baseUrl, input.providerType);
-    return request(endpoint, {
+  private async probeProviderInternal(input: ProviderProbeInput): Promise<ProviderResponseSummary> {
+    const provider = this.getResolvedProviderConfig(input);
+
+    try {
+      const response = await this.fetchModelCatalog(provider);
+      const payload = await this.safeJson(response);
+      return {
+        success: response.ok,
+        statusCode: response.status,
+        models: this.extractModelIds(provider.providerType, payload),
+        error: response.ok ? undefined : this.extractErrorMessage(payload),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        statusCode: 0,
+        models: [],
+        error: error instanceof Error ? error.message : 'Unknown connectivity error',
+      };
+    }
+  }
+
+  private async fetchModelCatalog(provider: ProviderConfig): Promise<Response> {
+    const { providerType, baseUrl, apiKey, timeoutSeconds } = provider;
+    const signal = AbortSignal.timeout(timeoutSeconds * 1000);
+
+    if (providerType === 'gemini') {
+      return fetch(`${baseUrl.replace(/\/+$/, '')}/models?key=${encodeURIComponent(apiKey ?? '')}`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+        },
+        signal,
+      });
+    }
+
+    if (providerType === 'anthropic') {
+      return fetch(`${baseUrl.replace(/\/+$/, '')}/v1/models`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+          'anthropic-version': '2023-06-01',
+          'x-api-key': apiKey ?? '',
+        },
+        signal,
+      });
+    }
+
+    if (providerType === 'ollama') {
+      return fetch(`${baseUrl.replace(/\/+$/, '')}/api/tags`, {
+        method: 'GET',
+        headers: {
+          Accept: 'application/json',
+        },
+        signal,
+      });
+    }
+
+    return fetch(this.resolveOpenAiModelsUrl(baseUrl), {
       method: 'GET',
       headers: {
-        Authorization: `Bearer ${input.apiKey}`,
         Accept: 'application/json',
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
       },
-      headersTimeout: input.timeoutSeconds * 1000,
-      bodyTimeout: input.timeoutSeconds * 1000,
+      signal,
     });
   }
 
-  private resolveModelsUrl(baseUrl: string, providerType: string): string {
+  private extractModelIds(providerType: ProviderType, payload: unknown): string[] {
+    if (!payload || typeof payload !== 'object') {
+      return [];
+    }
+
+    if (providerType === 'gemini') {
+      const models = Array.isArray((payload as { models?: unknown[] }).models)
+        ? (payload as { models: Array<{ name?: string; displayName?: string }> }).models
+        : [];
+
+      return models
+        .map((entry) => {
+          const name = entry.name?.trim() || entry.displayName?.trim() || '';
+          return name.startsWith('models/') ? name.slice('models/'.length) : name;
+        })
+        .filter((entry) => entry.length > 0)
+        .sort((left, right) => left.localeCompare(right));
+    }
+
+    if (providerType === 'ollama') {
+      const models = Array.isArray((payload as { models?: unknown[] }).models)
+        ? (payload as { models: Array<{ name?: string; model?: string }> }).models
+        : [];
+
+      return models
+        .map((entry) => entry.name?.trim() || entry.model?.trim() || '')
+        .filter((entry) => entry.length > 0)
+        .sort((left, right) => left.localeCompare(right));
+    }
+
+    const data = Array.isArray((payload as { data?: unknown[] }).data)
+      ? (payload as { data: Array<{ id?: string; name?: string; display_name?: string }> }).data
+      : [];
+
+    return data
+      .map((entry) => entry.id?.trim() || entry.name?.trim() || entry.display_name?.trim() || '')
+      .filter((entry) => entry.length > 0)
+      .sort((left, right) => left.localeCompare(right));
+  }
+
+  private extractErrorMessage(payload: unknown): string | undefined {
+    if (!payload || typeof payload !== 'object') {
+      return undefined;
+    }
+
+    const record = payload as {
+      error?: { message?: string } | string;
+      message?: string;
+    };
+
+    if (typeof record.error === 'string') {
+      return record.error;
+    }
+    if (record.error && typeof record.error === 'object' && typeof record.error.message === 'string') {
+      return record.error.message;
+    }
+    if (typeof record.message === 'string') {
+      return record.message;
+    }
+    return undefined;
+  }
+
+  private resolveOpenAiModelsUrl(baseUrl: string): string {
     const normalized = baseUrl.replace(/\/+$/, '');
     if (normalized.endsWith('/models')) {
       return normalized;
@@ -239,37 +378,104 @@ export class AiProvidersService {
     if (normalized.endsWith('/v1')) {
       return `${normalized}/models`;
     }
-    if (providerType === 'openai-compatible' || providerType === 'openrouter' || providerType === 'self-hosted') {
-      return `${normalized}/v1/models`;
-    }
-
-    return `${normalized}/models`;
+    return `${normalized}/v1/models`;
   }
 
-  private async extractModelIds(response: Awaited<ReturnType<typeof request>>) {
-    if (response.statusCode < 200 || response.statusCode >= 300) {
-      return [];
+  private normalizeProviderInput(input: {
+    name?: string;
+    providerType: string;
+    baseUrl?: string;
+    model?: string;
+    apiKey?: string;
+    enabled?: boolean;
+    timeoutSeconds?: number;
+    maxTokens?: number;
+    temperature?: number;
+  }) {
+    const providerType = this.normalizeProviderType(input.providerType);
+    const defaults = PROVIDER_DEFAULTS[providerType];
+    const trimmedName = input.name?.trim();
+
+    return {
+      name: trimmedName || this.getDefaultProviderName(providerType),
+      providerType,
+      baseUrl: this.normalizeBaseUrl(input.baseUrl?.trim() || defaults.baseUrl, providerType),
+      model: input.model?.trim() || 'workflow-selected',
+      apiKey: input.apiKey?.trim() || '',
+      enabled: input.enabled,
+      timeoutSeconds: input.timeoutSeconds,
+      maxTokens: input.maxTokens,
+      temperature: input.temperature,
+    };
+  }
+
+  private normalizeProviderType(value: string): ProviderType {
+    const normalized = value.trim().toLowerCase();
+    switch (normalized) {
+      case 'openai':
+      case 'anthropic':
+      case 'gemini':
+      case 'openai-compatible':
+      case 'lm-studio':
+      case 'ollama':
+        return normalized;
+      case 'openrouter':
+      case 'self-hosted':
+        return 'openai-compatible';
+      default:
+        throw new BadRequestException('Unsupported provider type.');
+    }
+  }
+
+  private normalizeBaseUrl(baseUrl: string, providerType: ProviderType): string {
+    const normalized = baseUrl.replace(/\/+$/, '');
+    if (providerType === 'openai' && normalized === 'https://api.openai.com') {
+      return 'https://api.openai.com/v1';
+    }
+    if (providerType === 'lm-studio' && normalized === 'http://localhost:1234/v1') {
+      return normalized;
+    }
+    if (providerType === 'openai-compatible' && normalized === 'https://api.openai.com') {
+      return 'https://api.openai.com/v1';
+    }
+    return normalized;
+  }
+
+  private getDefaultProviderName(providerType: ProviderType): string {
+    switch (providerType) {
+      case 'gemini':
+        return 'Gemini';
+      case 'anthropic':
+        return 'Anthropic';
+      case 'openai':
+        return 'OpenAI';
+      case 'openai-compatible':
+        return 'OpenAI-compatible';
+      case 'lm-studio':
+        return 'LM Studio';
+      case 'ollama':
+        return 'Ollama';
+    }
+  }
+
+  private async safeJson(response: Response): Promise<unknown> {
+    const text = await response.text();
+    if (!text.trim()) {
+      return null;
     }
 
-    const payload = (await response.body.json().catch(() => null)) as
-      | null
-      | { data?: Array<{ id?: string; name?: string }> };
-
-    if (!payload?.data || !Array.isArray(payload.data)) {
-      return [];
+    try {
+      return JSON.parse(text) as unknown;
+    } catch {
+      return { message: text.slice(0, 400) };
     }
-
-    return payload.data
-      .map((entry) => (typeof entry.id === 'string' && entry.id.trim() ? entry.id.trim() : typeof entry.name === 'string' ? entry.name.trim() : ''))
-      .filter((entry) => entry.length > 0)
-      .sort((left, right) => left.localeCompare(right));
   }
 
   private serialize(provider: AiProviderRow) {
     return {
       id: provider.id,
       name: provider.name,
-      providerType: provider.providerType,
+      providerType: this.normalizeProviderType(provider.providerType),
       baseUrl: provider.baseUrl,
       model: provider.model,
       enabled: Boolean(provider.enabled),

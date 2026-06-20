@@ -57,7 +57,7 @@ export default function LoginPage() {
             description="Use the configured password or request a Telegram OTP from the management bot."
           />
           <p className="max-w-xl text-sm leading-7 text-muted-foreground">
-            Browser access remains protected even in the single-owner deployment model. Sessions use secure cookies and expire according to the configured runtime policy.
+            Browser access uses the configured owner authentication mode. Sessions use secure cookies and expire according to the configured runtime policy.
           </p>
         </section>
         <div className="space-y-4">

@@ -76,9 +76,7 @@ export class SessionsService {
   }
 
   private getConfiguredDurationMinutes(): number {
-    const setting = this.databaseService.get<{ sessionDurationMinutes: number }>(
-      'SELECT sessionDurationMinutes FROM AppSettings WHERE id = 1',
-    );
-    return setting?.sessionDurationMinutes ?? DEFAULT_SESSION_DURATION_MINUTES;
+    const configured = Number(process.env.SESSION_DURATION_MINUTES ?? DEFAULT_SESSION_DURATION_MINUTES);
+    return Number.isFinite(configured) && configured >= 5 ? configured : DEFAULT_SESSION_DURATION_MINUTES;
   }
 }

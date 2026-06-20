@@ -34,7 +34,7 @@ export class AuthService {
       throw new UnauthorizedException('The supplied password is incorrect.');
     }
 
-    const session = this.sessionsService.createSession(settings.sessionDurationMinutes);
+    const session = this.sessionsService.createSession();
     return {
       sessionToken: session.token,
       expiresAt: session.expiresAt,
@@ -77,8 +77,7 @@ export class AuthService {
     }
 
     this.databaseService.run('UPDATE LoginOtp SET used = 1 WHERE id = ?', [otp.id]);
-    const settings = this.settingsService.getSettings();
-    const session = this.sessionsService.createSession(settings.sessionDurationMinutes);
+    const session = this.sessionsService.createSession();
     return {
       sessionToken: session.token,
       expiresAt: session.expiresAt,
