@@ -1,28 +1,14 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { AiProvidersService } from '../ai-providers/ai-providers.service';
-import { AuthService } from '../auth/auth.service';
-import { OTP_EXPIRATION_MINUTES } from '../common/constants/app.constants';
 import { AuthMode } from '../common/enums/auth-mode.enum';
-import { createNumericOtp } from '../common/utils/crypto.util';
 import { DatabaseService } from '../database/database.service';
+import { LogsService } from '../logs/logs.service';
 import { SecretsService } from '../secrets/secrets.service';
 import { SettingsService } from '../settings/settings.service';
 import { TelegramBotService } from '../telegram-bot/telegram-bot.service';
 import { CompleteSetupDto } from './dto/complete-setup.dto';
 import { SetupAiProviderTestDto } from './dto/setup-ai-provider-test.dto';
-import { SetupOtpTestRequestDto } from './dto/setup-otp-test-request.dto';
-import { SetupOtpTestVerifyDto } from './dto/setup-otp-test-verify.dto';
-import { SetupTelegramApiTestDto } from './dto/setup-telegram-api-test.dto';
 import { SetupTelegramBotTestDto } from './dto/setup-telegram-bot-test.dto';
-
-interface SetupOtpRow {
-  id: number;
-  code: string;
-  ownerTelegramChatId: string;
-  expiresAt: string;
-  used: number;
-  createdAt: string;
-}
 
 @Injectable()
 export class SetupService {
@@ -30,9 +16,9 @@ export class SetupService {
     private readonly databaseService: DatabaseService,
     private readonly settingsService: SettingsService,
     private readonly secretsService: SecretsService,
-    private readonly authService: AuthService,
     private readonly aiProvidersService: AiProvidersService,
     private readonly telegramBotService: TelegramBotService,
+    private readonly logsService: LogsService,
   ) {}
 
   getStatus() {
@@ -47,19 +33,6 @@ export class SetupService {
     const status = this.getStatus();
     if (status.initialized) {
       throw new BadRequestException('Initial setup has already been completed.');
-    }
-
-    if (dto.authMode === AuthMode.Password && !dto.password?.trim()) {
-      throw new BadRequestException('A password is required when password authentication is selected.');
-    }
-
-    if (dto.authMode === AuthMode.TelegramOtp) {
-      if (!dto.ownerTelegramChatId?.trim()) {
-        throw new BadRequestException('Owner Telegram chat ID is required for Telegram OTP mode.');
-      }
-      if (!dto.telegramBotToken?.trim()) {
-        throw new BadRequestException('Telegram bot token is required for Telegram OTP mode.');
-      }
     }
 
     const firstProvider = dto.aiProviders[0];
@@ -104,7 +77,7 @@ export class SetupService {
           dto.locale?.trim() || 'en',
           dto.defaultLanguage?.trim() || 'English',
           1,
-          dto.authMode,
+          AuthMode.None,
           dto.ownerTelegramChatId?.trim() || null,
           dto.telegramBotUsername?.trim() || null,
           now,
@@ -145,32 +118,25 @@ export class SetupService {
       this.databaseService.run('UPDATE AppSettings SET defaultAiProviderId = ? WHERE id = 1', [result.lastInsertRowid]);
     });
 
-    if (dto.authMode === AuthMode.Password && dto.password?.trim()) {
-      await this.authService.configurePassword(dto.password.trim());
-    } else {
-      this.settingsService.updatePasswordHash(null);
-    }
+    this.settingsService.updatePasswordHash(null);
 
     return this.settingsService.getSettings();
   }
 
   async testProviderConfiguration(dto: SetupAiProviderTestDto) {
-    return this.aiProvidersService.probeProvider(dto);
-  }
-
-  async testTelegramApiConfiguration(dto: SetupTelegramApiTestDto) {
-    const response = await fetch('https://api.telegram.org', {
-      method: 'HEAD',
-      signal: AbortSignal.timeout(10_000),
-    });
-
-    return {
-      success: response.ok,
-      statusCode: response.status,
-      message: response.ok
-        ? 'Telegram API endpoint is reachable. API ID and hash format look acceptable.'
-        : 'Telegram API endpoint could not be reached.',
-    };
+    const result = await this.aiProvidersService.probeProvider(dto);
+    if (result.success) {
+      this.logsService.info(
+        `Setup provider test succeeded for ${dto.providerType} (${result.statusCode})`,
+        SetupService.name,
+      );
+    } else {
+      this.logsService.warn(
+        `Setup provider test failed for ${dto.providerType} (${result.statusCode}): ${result.error ?? 'No error details returned.'}`,
+        SetupService.name,
+      );
+    }
+    return result;
   }
 
   async testTelegramBotConfiguration(dto: SetupTelegramBotTestDto) {
@@ -191,109 +157,71 @@ export class SetupService {
           result?: { username?: string };
           description?: string;
         };
+    const botUsername = payload?.result?.username
+      ? `@${payload.result.username}`
+      : dto.telegramBotUsername?.trim()
+        ? `@${dto.telegramBotUsername.trim().replace(/^@/, '')}`
+        : 'the bot';
 
     if (!(response.ok && payload?.ok === true)) {
+      const rawMessage = payload?.description ?? 'Telegram bot token could not be verified.';
+      const message = rawMessage.toLowerCase().includes('chat not found')
+        ? `Start ${botUsername} in Telegram first, then run the test again.`
+        : rawMessage;
       return {
         success: false,
         statusCode: response.status,
         username: payload?.result?.username ?? null,
-        message: payload?.description ?? 'Telegram bot token could not be verified.',
+        message,
       };
     }
 
     if (!ownerTelegramChatId) {
+      this.logsService.warn(
+        `Setup Telegram bot test blocked: owner chat id missing for ${botUsername}.`,
+        SetupService.name,
+      );
       return {
-        success: true,
+        success: false,
         statusCode: response.status,
         username: payload?.result?.username ?? null,
-        message: 'Telegram bot token is valid.',
+        message: `Bot token is valid. Enter the owner chat ID, start ${botUsername} in Telegram, then run the test again.`,
       };
     }
 
-    const oneMinuteAgo = new Date(Date.now() - 60_000).toISOString();
-    const recentAttempt = this.databaseService.get<{ id: number }>(
-      'SELECT id FROM SetupBotTest WHERE ownerTelegramChatId = ? AND createdAt >= ? ORDER BY id DESC LIMIT 1',
-      [ownerTelegramChatId, oneMinuteAgo],
-    );
-
-    if (recentAttempt) {
-      throw new BadRequestException('Start the bot from your Telegram account before requesting another bot test.');
+    try {
+      await this.telegramBotService.sendSetupTestMessage(
+        token,
+        ownerTelegramChatId,
+        'DraftMind bot test message. If you can read this, the bot can reach the owner chat.',
+      );
+    } catch (error) {
+      const rawMessage = error instanceof Error ? error.message : 'Telegram bot could not send the test message.';
+      const message = rawMessage.toLowerCase().includes('chat not found')
+        ? `Start ${botUsername} in Telegram first, then run the test again.`
+        : rawMessage;
+      this.logsService.warn(
+        `Setup Telegram bot test failed for chat ${ownerTelegramChatId}: ${rawMessage}`,
+        SetupService.name,
+      );
+      return {
+        success: false,
+        statusCode: response.status,
+        username: payload?.result?.username ?? null,
+        message,
+      };
     }
 
-    await this.telegramBotService.sendSetupTestMessage(
-      token,
-      ownerTelegramChatId,
-      'DraftMind bot test message. If you can read this, the bot can reach the owner chat.',
+    this.logsService.info(
+      `Setup Telegram bot test succeeded for chat ${ownerTelegramChatId}.`,
+      SetupService.name,
     );
-
-    this.databaseService.run('INSERT INTO SetupBotTest (ownerTelegramChatId, createdAt) VALUES (?, ?)', [
-      ownerTelegramChatId,
-      new Date().toISOString(),
-    ]);
 
     return {
       success: true,
       statusCode: response.status,
       username: payload?.result?.username ?? null,
-      message: 'Telegram bot token is valid and a sample message was sent to the owner chat.',
+      message: 'Bot token is valid and a test message was sent to the owner chat.',
     };
-  }
-
-  async sendOtpTest(dto: SetupOtpTestRequestDto) {
-    const ownerTelegramChatId = dto.ownerTelegramChatId.trim();
-    const telegramBotToken = dto.telegramBotToken.trim();
-
-    const oneMinuteAgo = new Date(Date.now() - 60_000).toISOString();
-    const recentAttempt = this.databaseService.get<{ id: number }>(
-      'SELECT id FROM SetupOtpTest WHERE ownerTelegramChatId = ? AND createdAt >= ? ORDER BY id DESC LIMIT 1',
-      [ownerTelegramChatId, oneMinuteAgo],
-    );
-
-    if (recentAttempt) {
-      throw new BadRequestException('Start the bot from your Telegram account before requesting another OTP test.');
-    }
-
-    await this.telegramBotService.sendSetupTestMessage(
-      telegramBotToken,
-      ownerTelegramChatId,
-      'DraftMind bot test message. If you can read this, bot delivery to the owner chat is working.',
-    );
-
-    const code = createNumericOtp();
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + OTP_EXPIRATION_MINUTES * 60_000).toISOString();
-
-    this.databaseService.run(
-      'INSERT INTO SetupOtpTest (code, ownerTelegramChatId, expiresAt, used, createdAt) VALUES (?, ?, ?, ?, ?)',
-      [code, ownerTelegramChatId, expiresAt, 0, now.toISOString()],
-    );
-
-    await this.telegramBotService.sendSetupTestMessage(
-      telegramBotToken,
-      ownerTelegramChatId,
-      `DraftMind OTP test code: ${code}\nExpires at: ${expiresAt}`,
-    );
-
-    return {
-      success: true,
-      expiresAt,
-    };
-  }
-
-  verifyOtpTest(dto: SetupOtpTestVerifyDto) {
-    const otp = this.databaseService.get<SetupOtpRow>(
-      `SELECT id, code, ownerTelegramChatId, expiresAt, used, createdAt
-       FROM SetupOtpTest
-       WHERE ownerTelegramChatId = ? AND code = ?
-       ORDER BY id DESC LIMIT 1`,
-      [dto.ownerTelegramChatId.trim(), dto.code.trim()],
-    );
-
-    if (!otp || otp.used || new Date(otp.expiresAt).getTime() <= Date.now()) {
-      throw new UnauthorizedException('The supplied OTP code is invalid or expired.');
-    }
-
-    this.databaseService.run('UPDATE SetupOtpTest SET used = 1 WHERE id = ?', [otp.id]);
-    return { success: true };
   }
 }

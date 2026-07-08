@@ -71,11 +71,6 @@ export class CompleteSetupDto {
   authMode!: AuthMode;
 
   @IsOptional()
-  @IsString()
-  @MaxLength(255)
-  password?: string;
-
-  @IsOptional()
   telegramApiId?: number | null;
 
   @IsOptional()

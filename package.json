@@ -2,7 +2,7 @@
   "name": "draftmind",
   "private": true,
   "version": "0.1.0",
-  "packageManager": "pnpm@11.4.0",
+  "packageManager": "pnpm@11.8.0",
   "scripts": {
     "first-start": "node scripts/first-start.mjs",
     "start": "node scripts/start-local.mjs",

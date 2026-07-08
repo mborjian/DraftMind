@@ -6,5 +6,9 @@ export class SetupTelegramBotTestDto {
 
   @IsOptional()
   @IsString()
+  telegramBotUsername?: string;
+
+  @IsOptional()
+  @IsString()
   ownerTelegramChatId?: string;
 }

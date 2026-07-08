@@ -1,28 +1,21 @@
 'use client';
 
-import Link from 'next/link';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, CheckCircle2, CircleHelp, Eye, EyeOff, MessageSquareMore, ShieldCheck } from 'lucide-react';
+import { Bot, CheckCircle2, CircleHelp, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { InputGroup, InputGroupButton } from '@/components/ui/input-group';
+import { Select } from '@/components/ui/select';
 import { SectionHeading } from '@/components/common/section-heading';
 import { FormField } from '@/components/forms/form-field';
 import { FormSection } from '@/components/forms/form-section';
 import { TimezoneCombobox } from '@/components/forms/timezone-combobox';
-import { SegmentedControl } from '@/components/ui/segmented-control';
 import { InlineToast } from '@/components/ui/toast';
 import { handleClientError } from '@/lib/handle-client-error';
 import { isValidTimezone, normalizeTimezoneInput } from '@/lib/timezones';
-import {
-  completeSetup,
-  sendSetupOtpTest,
-  testSetupProvider,
-  testSetupTelegramApi,
-  testSetupTelegramBot,
-  verifySetupOtpTest,
-} from '@/services/setup';
+import { completeSetup, testSetupProvider, testSetupTelegramBot } from '@/services/setup';
 
 const steps = [
   {
@@ -40,11 +33,6 @@ const steps = [
     title: 'AI provider',
     description: 'Configure the primary provider endpoint and validate connectivity.',
   },
-  {
-    id: 'auth',
-    title: 'Auth',
-    description: 'Choose whether the deployment needs no auth, password login, or Telegram OTP.',
-  },
 ] as const;
 
 const providerOptions = [
@@ -54,12 +42,6 @@ const providerOptions = [
   { value: 'openai-compatible', label: 'OpenAI-compatible' },
   { value: 'lm-studio', label: 'LM Studio' },
   { value: 'ollama', label: 'Ollama' },
-] as const;
-
-const authOptions = [
-  { value: 'none', label: 'No auth' },
-  { value: 'password', label: 'Password' },
-  { value: 'telegram-otp', label: 'Telegram OTP' },
 ] as const;
 
 function getProviderDefaults(providerType: string) {
@@ -84,19 +66,14 @@ export default function SetupPage() {
   const [stepIndex, setStepIndex] = useState(0);
   const [status, setStatus] = useState<string>('Complete the initial setup once. After that, the wizard will stay hidden.');
   const [toast, setToast] = useState<{ message: string; tone: 'info' | 'success' | 'error' } | null>(null);
-  const [showPassword, setShowPassword] = useState(false);
   const [showApiHash, setShowApiHash] = useState(false);
   const [showBotToken, setShowBotToken] = useState(false);
   const [showProviderApiKey, setShowProviderApiKey] = useState(false);
   const [providerTested, setProviderTested] = useState(false);
-  const [telegramApiTested, setTelegramApiTested] = useState(false);
   const [telegramBotTested, setTelegramBotTested] = useState(false);
-  const [otpVerified, setOtpVerified] = useState(false);
   const [testingProvider, setTestingProvider] = useState(false);
-  const [testingTelegramApi, setTestingTelegramApi] = useState(false);
   const [testingTelegramBot, setTestingTelegramBot] = useState(false);
-  const [sendingOtp, setSendingOtp] = useState(false);
-  const [verifyingOtp, setVerifyingOtp] = useState(false);
+  const [attemptedStepIndexes, setAttemptedStepIndexes] = useState<number[]>([]);
   const [form, setForm] = useState({
     appName: 'DraftMind',
     timezone: 'UTC',
@@ -109,13 +86,12 @@ export default function SetupPage() {
     providerBaseUrl: 'https://api.openai.com/v1',
     providerApiKey: '',
     authMode: 'none',
-    password: '',
-    otpCode: '',
   });
 
   const currentStep = steps[stepIndex] ?? steps[0];
   const isLastStep = stepIndex === steps.length - 1;
   const providerRules = getProviderDefaults(form.providerType);
+  const showStepValidation = attemptedStepIndexes.includes(stepIndex);
 
   const validation = useMemo(() => {
     const errors: Record<string, string> = {};
@@ -147,18 +123,11 @@ export default function SetupPage() {
     if (providerRules.showApiKey && !form.providerApiKey.trim()) {
       errors.providerApiKey = 'Provider API key is required for this provider.';
     }
-    if (form.authMode === 'password' && !form.password.trim()) {
-      errors.password = 'Password is required for password auth.';
-    }
-    if (form.authMode === 'telegram-otp' && !form.otpCode.trim() && !otpVerified) {
-      errors.otpCode = 'Send and verify an OTP test before completing setup.';
-    }
 
     const stepValidities = [
       !errors.appName && !errors.timezone,
-      !errors.telegramApiId && !errors.telegramApiHash && !errors.ownerTelegramChatId && !errors.telegramBotUsername && !errors.telegramBotToken && telegramApiTested && telegramBotTested,
-      !errors.providerBaseUrl && !errors.providerApiKey && providerTested,
-      form.authMode === 'none' || (form.authMode === 'password' ? !errors.password : otpVerified),
+      !errors.telegramApiId && !errors.telegramApiHash && !errors.ownerTelegramChatId && !errors.telegramBotUsername && !errors.telegramBotToken,
+      !errors.providerBaseUrl && !errors.providerApiKey,
     ];
 
     return {
@@ -166,37 +135,15 @@ export default function SetupPage() {
       stepValidities,
       currentStepValid: stepValidities[stepIndex] ?? false,
     };
-  }, [
-    form,
-    otpVerified,
-    providerRules.showApiKey,
-    providerRules.showBaseUrl,
-    providerTested,
-    stepIndex,
-    telegramApiTested,
-    telegramBotTested,
-  ]);
+  }, [form, providerRules.showApiKey, providerRules.showBaseUrl, stepIndex]);
 
   function updateForm<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
-    if (key === 'telegramApiId' || key === 'telegramApiHash') {
-      setTelegramApiTested(false);
-    }
-
     if (key === 'telegramBotToken' || key === 'ownerTelegramChatId' || key === 'telegramBotUsername') {
       setTelegramBotTested(false);
-      setOtpVerified(false);
     }
 
     if (key === 'providerApiKey' || key === 'providerBaseUrl') {
       setProviderTested(false);
-    }
-
-    if (key === 'authMode') {
-      setOtpVerified(false);
-    }
-
-    if (key === 'otpCode') {
-      setOtpVerified(false);
     }
 
     setForm((current) => ({ ...current, [key]: value }));
@@ -212,8 +159,17 @@ export default function SetupPage() {
     setProviderTested(false);
   }
 
+  function revealCurrentStepValidation() {
+    setAttemptedStepIndexes((current) => (current.includes(stepIndex) ? current : [...current, stepIndex]));
+  }
+
+  function isFieldInvalid(name: keyof typeof validation.errors) {
+    return showStepValidation && Boolean(validation.errors[name]);
+  }
+
   async function handleProviderTest() {
     setTestingProvider(true);
+    setToast(null);
     setStatus('Testing the AI provider connection...');
     try {
       const result = await testSetupProvider({
@@ -223,39 +179,31 @@ export default function SetupPage() {
         timeoutSeconds: 60,
       });
       setProviderTested(result.success);
-      setStatus(result.success ? `Provider connection succeeded with HTTP ${result.statusCode}.` : `Provider test failed with HTTP ${result.statusCode}.`);
+      const message = result.success
+        ? `Provider connection succeeded with HTTP ${result.statusCode}.`
+        : result.error
+          ? `Provider test failed: ${result.error}`
+          : `Provider test failed with HTTP ${result.statusCode}.`;
+      setStatus(message);
+      setToast({ message, tone: result.success ? 'success' : 'error' });
     } catch (error) {
       setProviderTested(false);
-      setStatus(handleClientError(error, router, 'Provider test failed.'));
+      const message = handleClientError(error, router, 'Provider test failed.');
+      setStatus(message);
+      setToast({ message, tone: 'error' });
     } finally {
       setTestingProvider(false);
     }
   }
 
-  async function handleTelegramApiTest() {
-    setTestingTelegramApi(true);
-    setStatus('Testing Telegram API reachability...');
-    try {
-      const result = await testSetupTelegramApi({
-        telegramApiId: Number(form.telegramApiId),
-        telegramApiHash: form.telegramApiHash,
-      });
-      setTelegramApiTested(result.success);
-      setStatus(result.message);
-    } catch (error) {
-      setTelegramApiTested(false);
-      setStatus(handleClientError(error, router, 'Telegram API test failed.'));
-    } finally {
-      setTestingTelegramApi(false);
-    }
-  }
-
   async function handleTelegramBotTest() {
     setTestingTelegramBot(true);
-    setStatus('Testing Telegram bot credentials...');
+    setToast(null);
+    setStatus('Sending a Telegram bot test message...');
     try {
       const result = await testSetupTelegramBot({
         telegramBotToken: form.telegramBotToken,
+        telegramBotUsername: form.telegramBotUsername,
         ownerTelegramChatId: form.ownerTelegramChatId,
       });
       setTelegramBotTested(result.success);
@@ -263,59 +211,17 @@ export default function SetupPage() {
         updateForm('telegramBotUsername', result.username);
       }
       setStatus(result.message);
+      setToast({
+        message: result.message,
+        tone: result.success ? 'success' : 'info',
+      });
     } catch (error) {
       setTelegramBotTested(false);
-      setStatus(handleClientError(error, router, 'Telegram bot test failed.'));
+      const message = handleClientError(error, router, 'Telegram bot test failed.');
+      setStatus(message);
+      setToast({ message, tone: 'error' });
     } finally {
       setTestingTelegramBot(false);
-    }
-  }
-
-  async function handleOtpSendTest() {
-    setSendingOtp(true);
-    setToast(null);
-    setStatus('Sending a Telegram OTP test...');
-    try {
-      await sendSetupOtpTest({
-        telegramBotToken: form.telegramBotToken,
-        ownerTelegramChatId: form.ownerTelegramChatId,
-      });
-      setOtpVerified(false);
-      setStatus('Bot test message and OTP test code sent.');
-    } catch (error) {
-      const message = handleClientError(error, router, 'OTP test failed.');
-      setStatus(message);
-      if (message.toLowerCase().includes('start the bot')) {
-        setToast({
-          message: 'Start the bot from your Telegram account first, then try the OTP test again.',
-          tone: 'error',
-        });
-      }
-    } finally {
-      setSendingOtp(false);
-    }
-  }
-
-  async function handleOtpVerify() {
-    setVerifyingOtp(true);
-    setToast(null);
-    setStatus('Verifying the Telegram OTP test...');
-    try {
-      await verifySetupOtpTest({
-        ownerTelegramChatId: form.ownerTelegramChatId,
-        code: form.otpCode,
-      });
-      setOtpVerified(true);
-      setStatus('Telegram OTP test verified.');
-      setToast({
-        message: 'Telegram OTP delivery and verification are working.',
-        tone: 'success',
-      });
-    } catch (error) {
-      setOtpVerified(false);
-      setStatus(handleClientError(error, router, 'OTP verification failed.'));
-    } finally {
-      setVerifyingOtp(false);
     }
   }
 
@@ -324,7 +230,8 @@ export default function SetupPage() {
     setToast(null);
 
     if (!validation.currentStepValid) {
-      setStatus('Finish the required fields and tests in this step before continuing.');
+      revealCurrentStepValidation();
+      setStatus('Finish the required fields in this step before continuing.');
       return;
     }
 
@@ -342,7 +249,6 @@ export default function SetupPage() {
         appName: form.appName.trim(),
         timezone: normalizeTimezoneInput(form.timezone),
         authMode: form.authMode,
-        password: form.authMode === 'password' ? form.password : undefined,
         telegramApiId: Number(form.telegramApiId),
         telegramApiHash: form.telegramApiHash,
         telegramBotToken: form.telegramBotToken,
@@ -360,7 +266,7 @@ export default function SetupPage() {
         ],
       });
       setStatus('Setup completed. Redirecting...');
-      router.push(form.authMode === 'none' ? '/dashboard' : '/');
+      router.push('/dashboard');
       router.refresh();
     } catch (error) {
       setStatus(handleClientError(error, router, 'Setup failed.'));
@@ -375,9 +281,7 @@ export default function SetupPage() {
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
-      <SectionHeading
-        title="Setup wizard"
-      />
+      <SectionHeading title="Setup wizard" />
 
       <div className="mt-6">
         <InlineToast message={toast?.message ?? null} tone={toast?.tone} />
@@ -389,7 +293,11 @@ export default function SetupPage() {
           <div className="space-y-3">
             {steps.map((step, index) => {
               const state =
-                index === stepIndex ? 'border-primary bg-primary/10 text-foreground' : index < stepIndex ? 'border-emerald-500/40 bg-emerald-500/10 text-foreground' : 'border-border/70 bg-background/60 text-muted-foreground';
+                index === stepIndex
+                  ? 'border-primary bg-primary/10 text-foreground'
+                  : index < stepIndex
+                    ? 'border-emerald-500/40 bg-emerald-500/10 text-foreground'
+                    : 'border-border/70 bg-background/60 text-muted-foreground';
               return (
                 <button
                   key={step.id}
@@ -418,12 +326,12 @@ export default function SetupPage() {
           <FormSection title={`Step ${stepIndex + 1}: ${currentStep.title}`} description={currentStep.description}>
             {stepIndex === 0 ? (
               <div className="grid gap-4">
-                <FormField label="Application name" error={validation.errors.appName} helper="Shown in the UI and stored in global settings.">
+                <FormField label="Application name" invalid={isFieldInvalid('appName')} helper="Shown in the UI and stored in global settings.">
                   <Input value={form.appName} onChange={(event) => updateForm('appName', event.target.value)} placeholder="DraftMind" />
                 </FormField>
                 <FormField
                   label="Timezone"
-                  error={validation.errors.timezone}
+                  invalid={isFieldInvalid('timezone')}
                   helper="Search all supported IANA timezones, or type a numeric value such as UTC+01:00 or UTC-06:30."
                 >
                   <TimezoneCombobox value={form.timezone} onChange={(value) => updateForm('timezone', value)} />
@@ -434,16 +342,10 @@ export default function SetupPage() {
             {stepIndex === 1 ? (
               <div className="space-y-6">
                 <div className="grid gap-4">
-                  <FormField label="Telegram API ID" error={validation.errors.telegramApiId} helper="API ID for the Telegram account integration.">
-                    <div className="flex gap-2">
-                      <Input type="number" value={form.telegramApiId} onChange={(event) => updateForm('telegramApiId', event.target.value)} placeholder="1234567" inputMode="numeric" />
-                      <Button type="button" variant="secondary" onClick={() => void handleTelegramApiTest()} disabled={testingTelegramApi}>
-                        {testingTelegramApi ? 'Testing...' : 'Test'}
-                      </Button>
-                      {telegramApiTested ? <CheckCircle2 className="mt-3 h-5 w-5 shrink-0 text-emerald-600" /> : null}
-                    </div>
+                  <FormField label="Telegram API ID" invalid={isFieldInvalid('telegramApiId')} helper="API ID for the Telegram account integration.">
+                    <Input type="number" value={form.telegramApiId} onChange={(event) => updateForm('telegramApiId', event.target.value)} placeholder="1234567" inputMode="numeric" />
                   </FormField>
-                  <FormField label="Telegram API hash" error={validation.errors.telegramApiHash} helper="Stored encrypted at rest.">
+                  <FormField label="Telegram API hash" invalid={isFieldInvalid('telegramApiHash')} helper="Stored encrypted at rest.">
                     <div className="relative">
                       <Input
                         type={showApiHash ? 'text' : 'password'}
@@ -459,22 +361,32 @@ export default function SetupPage() {
                   </FormField>
                 </div>
 
-                <hr/>
+                <hr />
 
                 <div className="grid gap-4">
-                  <FormField label="Owner Telegram chat ID" error={validation.errors.ownerTelegramChatId} helper="Used for owner-only approvals, notifications, and OTPs.">
-                    <div className="flex gap-2">
-                      <Input value={form.ownerTelegramChatId} onChange={(event) => updateForm('ownerTelegramChatId', event.target.value)} placeholder="123456789" />
-                      <Link href="https://t.me/userinfobot" target="_blank" className="inline-flex items-center justify-center rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground transition hover:bg-secondary/80">
-                        <CircleHelp className="mr-2 h-4 w-4" />
+                  <FormField
+                    label="Owner Telegram chat ID"
+                    invalid={isFieldInvalid('ownerTelegramChatId')}
+                    helper="Used for owner-only approvals, notifications, and later auth if you enable it from the management panel."
+                  >
+                    <InputGroup>
+                      <Input value={form.ownerTelegramChatId} onChange={(event) => updateForm('ownerTelegramChatId', event.target.value)} placeholder="123456789" className="pr-24" />
+                      <InputGroupButton onClick={() => window.open('https://t.me/userinfobot', '_blank', 'noopener,noreferrer')}>
+                        <CircleHelp className="mr-1.5 h-3.5 w-3.5" />
                         Find
-                      </Link>
-                    </div>
+                      </InputGroupButton>
+                    </InputGroup>
                   </FormField>
-                  <FormField label="Telegram bot username" error={validation.errors.telegramBotUsername} helper="Helps confirm which bot the owner should start.">
-                    <Input value={form.telegramBotUsername} onChange={(event) => updateForm('telegramBotUsername', event.target.value)} placeholder="draftmind_bot" />
+                  <FormField label="Telegram bot username" invalid={isFieldInvalid('telegramBotUsername')} helper="Helps confirm which bot the owner should start.">
+                    <InputGroup>
+                      <Input value={form.telegramBotUsername} onChange={(event) => updateForm('telegramBotUsername', event.target.value)} placeholder="draftmind_bot" className="pr-40" />
+                      <InputGroupButton onClick={() => window.open('https://t.me/BotFather', '_blank', 'noopener,noreferrer')}>
+                        <Bot className="mr-1.5 h-3.5 w-3.5" />
+                        Open BotFather
+                      </InputGroupButton>
+                    </InputGroup>
                   </FormField>
-                  <FormField label="Telegram bot token" error={validation.errors.telegramBotToken} helper="Used for approvals, OTP, and notifications." className="md:col-span-2">
+                  <FormField label="Telegram bot token" invalid={isFieldInvalid('telegramBotToken')} helper="Used for approvals, notifications, and test delivery.">
                     <div className="relative">
                       <Input
                         value={form.telegramBotToken}
@@ -489,15 +401,18 @@ export default function SetupPage() {
                     </div>
                   </FormField>
                 </div>
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <Link href="https://t.me/BotFather" target="_blank" className="inline-flex items-center justify-center rounded-full bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground transition hover:bg-secondary/80">
-                    <Bot className="mr-2 h-4 w-4" />
-                    Open BotFather
-                  </Link>
+
+                <div className="space-y-3 rounded-3xl border border-border/70 bg-background/50 px-4 py-4">
+                  <p className="text-sm text-muted-foreground">Start the bot from the owner Telegram account first, then click test to send a sample message with the bot.</p>
                   <Button type="button" variant="secondary" onClick={() => void handleTelegramBotTest()} disabled={testingTelegramBot}>
-                    {testingTelegramBot ? 'Testing...' : 'Test bot'}
+                    {testingTelegramBot ? 'Sending...' : 'Test bot'}
                   </Button>
-                  {telegramBotTested ? <CheckCircle2 className="h-5 w-5 text-emerald-600" /> : null}
+                  {telegramBotTested ? (
+                    <div className="flex items-center gap-2 text-sm text-emerald-700">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Test message sent successfully.
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : null}
@@ -505,20 +420,16 @@ export default function SetupPage() {
             {stepIndex === 2 ? (
               <div className="grid gap-4">
                 <FormField label="Provider" helper="Choose the provider type that the backend should use.">
-                  <select
-                    value={form.providerType}
-                    onChange={(event) => updateProviderType(event.target.value)}
-                    className="flex h-11 w-full rounded-2xl border border-input bg-card px-4 py-2 text-sm text-foreground shadow-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/30"
-                  >
+                  <Select value={form.providerType} onChange={(event) => updateProviderType(event.target.value)}>
                     {providerOptions.map((option) => (
                       <option key={option.value} value={option.value}>
                         {option.label}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </FormField>
                 {providerRules.showBaseUrl ? (
-                  <FormField label="Base URL" error={validation.errors.providerBaseUrl} helper="The default value matches the usual local or compatible server port.">
+                  <FormField label="Base URL" invalid={isFieldInvalid('providerBaseUrl')} helper="The default value matches the usual local or compatible server port.">
                     <Input
                       type="url"
                       value={form.providerBaseUrl}
@@ -529,12 +440,12 @@ export default function SetupPage() {
                     />
                   </FormField>
                 ) : (
-                  <FormField label="Base URL" helper="The app uses the provider’s official default endpoint automatically.">
+                  <FormField label="Base URL" helper="The app uses the provider's official default endpoint automatically.">
                     <Input value={providerRules.baseUrl} disabled />
                   </FormField>
                 )}
                 {providerRules.showApiKey ? (
-                  <FormField label="Provider API key" error={validation.errors.providerApiKey} helper="Stored encrypted and not returned in plaintext after setup." className="md:col-span-2">
+                  <FormField label="Provider API key" invalid={isFieldInvalid('providerApiKey')} helper="Stored encrypted and not returned in plaintext after setup.">
                     <div className="relative">
                       <Input
                         value={form.providerApiKey}
@@ -552,69 +463,18 @@ export default function SetupPage() {
                     </div>
                   </FormField>
                 ) : null}
-                <div className="md:col-span-2 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-border/70 bg-background/50 px-4 py-4">
-                  <p className="text-sm text-muted-foreground">
-                    {providerTested ? 'Connection verified.' : 'Test the provider before continuing.'}
-                  </p>
+                <div className="space-y-3 rounded-3xl border border-border/70 bg-background/50 px-4 py-4">
+                  <p className="text-sm text-muted-foreground">Use the test button if you want to validate connectivity before continuing.</p>
                   <Button type="button" variant="secondary" onClick={() => void handleProviderTest()} disabled={testingProvider}>
                     {testingProvider ? 'Testing...' : 'Test connection'}
                   </Button>
+                  {providerTested ? (
+                    <div className="flex items-center gap-2 text-sm text-emerald-700">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Provider connection verified.
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-            ) : null}
-
-            {stepIndex === 3 ? (
-              <div className="space-y-4">
-                <FormField label="Authentication mode" helper="This final step decides how owner access works after setup.">
-                  <SegmentedControl value={form.authMode} items={authOptions} onChange={(value) => updateForm('authMode', value)} />
-                </FormField>
-                {form.authMode === 'password' ? (
-                  <FormField label="Owner password" error={validation.errors.password} helper="Use the eye icon to confirm the password before finishing.">
-                    <div className="relative">
-                      <Input
-                        type={showPassword ? 'text' : 'password'}
-                        value={form.password}
-                        onChange={(event) => updateForm('password', event.target.value)}
-                        placeholder="Set the owner password"
-                        className="pr-12"
-                      />
-                      <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground" onClick={() => setShowPassword((current) => !current)}>
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </FormField>
-                ) : null}
-                {form.authMode === 'telegram-otp' ? (
-                  <div className="space-y-4 rounded-3xl border border-border/70 bg-background/40 p-4">
-                    <p className="text-sm text-muted-foreground">
-                      Start the bot with the same Telegram account whose chat ID you entered earlier, then send and verify an OTP test.
-                    </p>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <div className="min-w-[220px] flex-1">
-                        <Input value={form.otpCode} onChange={(event) => updateForm('otpCode', event.target.value)} placeholder="OTP test code" />
-                      </div>
-                      <Button type="button" variant="secondary" onClick={() => void handleOtpSendTest()} disabled={sendingOtp}>
-                        <MessageSquareMore className="mr-2 h-4 w-4" />
-                        {sendingOtp ? 'Sending...' : 'Send OTP test'}
-                      </Button>
-                      <Button type="button" variant="secondary" onClick={() => void handleOtpVerify()} disabled={verifyingOtp}>
-                        <ShieldCheck className="mr-2 h-4 w-4" />
-                        {verifyingOtp ? 'Verifying...' : 'Verify'}
-                      </Button>
-                    </div>
-                    {otpVerified ? (
-                      <div className="flex items-center gap-2 text-sm text-emerald-700">
-                        <CheckCircle2 className="h-4 w-4" />
-                        OTP verification test passed.
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-                {form.authMode === 'none' ? (
-                  <div className="rounded-3xl border border-border/70 bg-background/40 p-4 text-sm text-muted-foreground">
-                    No browser login will be required after setup. You can still change this later from the management panel.
-                  </div>
-                ) : null}
               </div>
             ) : null}
           </FormSection>
@@ -623,9 +483,7 @@ export default function SetupPage() {
             <Button type="button" variant="secondary" onClick={goToPreviousStep} disabled={stepIndex === 0}>
               Back
             </Button>
-            <Button type="submit" disabled={!validation.currentStepValid}>
-              {isLastStep ? 'Complete setup' : 'Continue'}
-            </Button>
+            <Button type="submit">{isLastStep ? 'Complete setup' : 'Continue'}</Button>
           </div>
         </form>
       </div>
